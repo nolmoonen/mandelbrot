@@ -3,4 +3,4 @@ project(mandelbrot C)
 
 set(CMAKE_C_STANDARD 99)
 
-add_executable(mandelbrot main.c bmp.h)
+add_executable(mandelbrot main.c)
