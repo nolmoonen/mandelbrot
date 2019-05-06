@@ -37,7 +37,7 @@ struct RGB HSVtoRGB(struct HSV hsv) {
         q = (hsv.v * (255 - ((hsv.s * remainder) >> 8))) >> 8;
         t = (hsv.v * (255 - ((hsv.s * (255 - remainder)) >> 8))) >> 8;
 
-        struct RGB rgb = {};
+        struct RGB rgb = {0};
         switch (region) {
             case 0:
                 rgb.r = (uint8_t) hsv.v;

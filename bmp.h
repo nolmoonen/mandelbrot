@@ -84,7 +84,7 @@ uint32_t saveOutBitmap(struct Bitmap bitmap, const char *filePath) {
  * with the standard values used in this program.
  */
 struct Bitmap createBitmap(struct IntColor *data, uint32_t width, uint32_t height) {
-    struct Bitmap result = {};
+    struct Bitmap result = {0};
 
     result.header.fileType = 0x4D42;                            // 'BM'
     result.header.fileSize = sizeof(struct BitmapHeader) + (width * height * sizeof(uint32_t));

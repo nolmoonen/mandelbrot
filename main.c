@@ -24,7 +24,7 @@ const uint32_t HEIGHT = 1080 * 2;
  * Calculates a HSV color based on iterations.
  */
 struct RGB color(uint32_t n, uint32_t N) {
-    struct HSV hsv = {};
+    struct HSV hsv = {0};
     hsv.h = 255 * n / N;
     hsv.s = 255;
     hsv.v = n < N ? 255 : 0;
