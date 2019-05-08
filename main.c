@@ -1,3 +1,6 @@
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -66,7 +69,7 @@ uint32_t mandelbrot(struct Complex c) {
     return n;
 }
 
-int main() {
+void generate () {
     // allocate output data
     struct IntColor *data = (struct IntColor *) malloc(sizeof(struct IntColor) * WIDTH * HEIGHT);
 
@@ -96,4 +99,8 @@ int main() {
     // create the output file
     struct Bitmap bitmap = createBitmap(data, WIDTH, HEIGHT);
     saveOutBitmap(bitmap, "test.bmp");
+}
+
+int main() {
+    generate();
 }
