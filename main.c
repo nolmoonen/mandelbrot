@@ -1,4 +1,5 @@
 #define GLFW_INCLUDE_VULKAN
+
 #include <GLFW/glfw3.h>
 
 #include <stdio.h>
@@ -6,6 +7,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "vulkan.h"
 #include "bmp.h"
 #include "complex.h"
 #include "color.h"
@@ -22,6 +24,10 @@ const int32_t IM_END = 1;
 // output file dimensions
 const uint32_t WIDTH = 1920 * 2;
 const uint32_t HEIGHT = 1080 * 2;
+
+static void error_callback(int error, const char *description);
+
+static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
 /**
  * Calculates a HSV color based on iterations.
@@ -69,7 +75,7 @@ uint32_t mandelbrot(struct Complex c) {
     return n;
 }
 
-void generate () {
+void generate() {
     // allocate output data
     struct IntColor *data = (struct IntColor *) malloc(sizeof(struct IntColor) * WIDTH * HEIGHT);
 
@@ -102,5 +108,49 @@ void generate () {
 }
 
 int main() {
-    generate();
+    GLFWwindow *window;
+
+    // initialize glfw
+    if (!glfwInit()) {
+        return 1;
+    }
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
+    window = glfwCreateWindow(800, 600, "Vulkan", NULL, NULL);
+
+    if (!window) {
+        glfwTerminate();
+        return 1;
+    }
+
+    glfwSetErrorCallback(error_callback);
+    glfwSetKeyCallback(window, key_callback);
+
+    // initialize vulkan
+    if (vulkanInit()) {
+        glfwTerminate();
+        return 1;
+    }
+
+    // main loop
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+    }
+
+    // clean up vulkan
+    vulkanTerminate();
+
+    // clean up glfw
+    glfwDestroyWindow(window);
+    glfwTerminate();
+}
+
+static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, GLFW_TRUE);
+}
+
+static void error_callback(int error, const char *description) {
+    fprintf(stderr, "error: %s\n", description);
 }
