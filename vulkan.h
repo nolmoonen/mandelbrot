@@ -59,6 +59,11 @@ VkImageView *swapChainImageViews;
 
 VkPipelineLayout pipelineLayout;
 
+VkRenderPass renderPass;
+VkPipelineLayout pipelineLayout;
+
+VkPipeline graphicsPipeline;
+
 struct QueueFamilyIndices {
     int graphicsFamilyHasValue;
     uint32_t graphicsFamily;
@@ -720,8 +725,63 @@ bool createGraphicsPipeline() {
         return false;
     }
 
+    VkGraphicsPipelineCreateInfo pipelineInfo = {};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.renderPass = renderPass;
+    pipelineInfo.subpass = 0;
+    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+    if (vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline) != VK_SUCCESS) {
+        fprintf(stdout, "vulkan: failed to create graphics pipeline\n");
+        return false;
+    }
+
     vkDestroyShaderModule(logicalDevice, fragShaderModule, NULL);
     vkDestroyShaderModule(logicalDevice, vertShaderModule, NULL);
+
+    return true;
+}
+
+bool createRenderPass() {
+    VkAttachmentDescription colorAttachment = {};
+    colorAttachment.format = swapChainImageFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colorAttachmentRef = {};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+
+    VkRenderPassCreateInfo renderPassInfo = {};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(logicalDevice, &renderPassInfo, NULL, &renderPass) != VK_SUCCESS) {
+        fprintf(stdout, "vulkan: failed to create render pass\n");
+        return false;
+    }
 
     return true;
 }
@@ -734,6 +794,7 @@ bool vulkanInit(GLFWwindow *window) {
     if (!createLogicalDevice()) return false;
     if (!createSwapChain()) return false;
     if (!createImageViews()) return false;
+    if (!createRenderPass()) return false;
     if (!createGraphicsPipeline()) return false;
 
 //    getextensions();
@@ -742,7 +803,9 @@ bool vulkanInit(GLFWwindow *window) {
 }
 
 void vulkanTerminate() {
+    vkDestroyPipeline(logicalDevice, graphicsPipeline, NULL);
     vkDestroyPipelineLayout(logicalDevice, pipelineLayout, NULL);
+    vkDestroyRenderPass(logicalDevice, renderPass, NULL);
 
     for (uint32_t i = 0; i < nrof_swapChainImages; ++i) {
         VkImageView imageView = *(swapChainImageViews + i);
