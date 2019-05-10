@@ -51,8 +51,11 @@ VkQueue presentQueue;
 
 VkSwapchainKHR swapChain;
 VkImage *swapChainImages;
+uint32_t nrof_swapChainImages;
 VkFormat swapChainImageFormat;
 VkExtent2D swapChainExtent;
+
+VkImageView *swapChainImageViews;
 
 struct QueueFamilyIndices {
     int graphicsFamilyHasValue;
@@ -521,6 +524,7 @@ bool createSwapChain() {
     }
 
     vkGetSwapchainImagesKHR(logicalDevice, swapChain, &imageCount, NULL);
+    nrof_swapChainImages = imageCount;
     swapChainImages = (VkImage *) malloc(sizeof(VkImage) * imageCount);
     vkGetSwapchainImagesKHR(logicalDevice, swapChain, &imageCount, swapChainImages);
 
@@ -530,6 +534,33 @@ bool createSwapChain() {
     return true;
 }
 
+bool createImageViews() {
+    swapChainImageViews = (VkImageView *) malloc(sizeof(VkImageView) * nrof_swapChainImages);
+
+    for (size_t i = 0; i < nrof_swapChainImages; i++) {
+        VkImageViewCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        createInfo.image = swapChainImages[i];
+        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.format = swapChainImageFormat;
+        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
+
+        if (vkCreateImageView(logicalDevice, &createInfo, NULL, &swapChainImageViews[i]) != VK_SUCCESS) {
+            fprintf(stderr, "failed to create image views!");
+            return false;
+        }
+    }
+
+    return true;
+}
 
 bool vulkanInit(GLFWwindow *window) {
     if (!createInstance()) {
@@ -556,12 +587,21 @@ bool vulkanInit(GLFWwindow *window) {
         return false;
     }
 
+    if (!createImageViews()) {
+        return false;
+    }
+
 //    getextensions();
 
     return true;
 }
 
 void vulkanTerminate() {
+    for (uint32_t i = 0; i < nrof_swapChainImages; ++i) {
+        VkImageView imageView = *(swapChainImageViews + i);
+        vkDestroyImageView(logicalDevice, imageView, NULL);
+    }
+
     vkDestroySwapchainKHR(logicalDevice, swapChain, NULL);
     vkDestroyDevice(logicalDevice, NULL);
 
