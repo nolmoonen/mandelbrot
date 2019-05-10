@@ -129,7 +129,7 @@ int main() {
     glfwSetKeyCallback(window, key_callback);
 
     // initialize vulkan
-    if (vulkanInit()) {
+    if (vulkanInit(window)) {
         glfwTerminate();
         return 1;
     }

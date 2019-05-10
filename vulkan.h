@@ -31,16 +31,23 @@ const char **extensions;
 
 VkInstance instance;
 VkDebugUtilsMessengerEXT debugMessenger;
+VkSurfaceKHR surface;
 
 VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 VkDevice logicalDevice;
 
 VkQueue graphicsQueue;
+VkQueue presentQueue;
 
 struct QueueFamilyIndices {
-    int isComplete;
+    int graphicsFamilyHasValue;
     uint32_t graphicsFamily;
+
+    int presentFamilyHasValue;
+    uint32_t presentFamily;
 };
+
+const struct QueueFamilyIndices QUEUE_FAMILY_INDICES = {0, 0, 0, 0};
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
                                       const VkAllocationCallbacks *pAllocator,
@@ -217,7 +224,7 @@ void getextensions() {
 }
 
 struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
-    struct QueueFamilyIndices indices = {0, 0}; // initialize isComplete as 0
+    struct QueueFamilyIndices indices = QUEUE_FAMILY_INDICES; // default values
 
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
@@ -231,10 +238,19 @@ struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
 
         if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             indices.graphicsFamily = i;
-            indices.isComplete = 1;
+            indices.graphicsFamilyHasValue = 1;
         }
 
-        if (indices.isComplete) {
+        VkBool32 presentSupport = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+
+        if (queueFamily.queueCount > 0 && presentSupport) {
+            indices.presentFamily = i;
+            indices.presentFamilyHasValue = 1;
+        }
+
+        // this index works
+        if (indices.graphicsFamilyHasValue && indices.presentFamilyHasValue) {
             break;
         }
     }
@@ -245,7 +261,7 @@ struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
 int isDeviceSuitable(VkPhysicalDevice device) {
     struct QueueFamilyIndices indices = findQueueFamilies(device);
 
-    return indices.isComplete;
+    return indices.graphicsFamilyHasValue;
 }
 
 int pickPhysicalDevice() {
@@ -279,21 +295,30 @@ int pickPhysicalDevice() {
 int createLogicalDevice() {
     struct QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
-    VkDeviceQueueCreateInfo queueCreateInfo = {};
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily;
-    queueCreateInfo.queueCount = 1;
+    const uint32_t numberUniqueQueueFamilies = 2;
+    const uint32_t uniqueQueueFamilies[] = {indices.graphicsFamily, indices.presentFamily};
+
+    VkDeviceQueueCreateInfo *queueCreateInfos = (VkDeviceQueueCreateInfo *) malloc(
+            sizeof(VkDeviceQueueCreateInfo) * numberUniqueQueueFamilies);
 
     float queuePriority = 1.0f;
-    queueCreateInfo.pQueuePriorities = &queuePriority;
+    for (uint32_t i = 0; i < numberUniqueQueueFamilies; ++i) {
+        uint32_t queueFamily = *(uniqueQueueFamilies + i);
+        VkDeviceQueueCreateInfo queueCreateInfo = {};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = queueFamily;
+        queueCreateInfo.queueCount = 1;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+        *(queueCreateInfos + i) = queueCreateInfo;
+    }
 
     VkPhysicalDeviceFeatures deviceFeatures = {};
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
-    createInfo.pQueueCreateInfos = &queueCreateInfo;
-    createInfo.queueCreateInfoCount = 1;
+    createInfo.queueCreateInfoCount = numberUniqueQueueFamilies;
+    createInfo.pQueueCreateInfos = queueCreateInfos;
 
     createInfo.pEnabledFeatures = &deviceFeatures;
 
@@ -312,15 +337,30 @@ int createLogicalDevice() {
     }
 
     vkGetDeviceQueue(logicalDevice, indices.graphicsFamily, 0, &graphicsQueue);
+    vkGetDeviceQueue(logicalDevice, indices.presentFamily, 0, &presentQueue);
     return 0;
 }
 
-int vulkanInit() {
+int createSurface(GLFWwindow *window) {
+    if (glfwCreateWindowSurface(instance, window, NULL, &surface) != VK_SUCCESS) {
+        fprintf(stderr, "failed to create window surface");
+        return 1;
+    }
+
+    return 0;
+}
+
+
+int vulkanInit(GLFWwindow *window) {
     if (createInstance()) {
         return 1;
     }
 
     if (setupDebugMessenger()) {
+        return 1;
+    }
+
+    if (createSurface(window)) {
         return 1;
     }
 
@@ -344,6 +384,7 @@ void vulkanTerminate() {
         DestroyDebugUtilsMessengerEXT(instance, debugMessenger, NULL);
     }
 
+    vkDestroySurfaceKHR(instance, surface, NULL);
     vkDestroyInstance(instance, NULL);
 }
 
