@@ -260,7 +260,7 @@ struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
             indices.graphicsFamilyHasValue = 1;
         }
 
-        VkBool32 presentSupport = VK_FALSE;
+        VkBool32 presentSupport = false;
         vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
         if (queueFamily.queueCount > 0 && presentSupport) {
@@ -268,7 +268,7 @@ struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
             indices.presentFamilyHasValue = 1;
         }
 
-        // this index works
+        // some combination of indices works
         if (indices.graphicsFamilyHasValue && indices.presentFamilyHasValue) {
             break;
         }
@@ -419,8 +419,20 @@ bool pickPhysicalDevice() {
 bool createLogicalDevice() {
     struct QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
-    const uint32_t numberUniqueQueueFamilies = 2;
-    const uint32_t uniqueQueueFamilies[] = {indices.graphicsFamily, indices.presentFamily};
+    uint32_t numberUniqueQueueFamilies;
+    uint32_t *uniqueQueueFamilies;
+
+    // make sure queue families are unique
+    if (indices.graphicsFamily == indices.presentFamily) {
+        numberUniqueQueueFamilies = 1;
+        uniqueQueueFamilies = (uint32_t *) malloc(sizeof(uint32_t));
+        *uniqueQueueFamilies = indices.graphicsFamily;
+    } else {
+        numberUniqueQueueFamilies = 2;
+        uniqueQueueFamilies = (uint32_t *) malloc(sizeof(uint32_t) * 2);
+        *uniqueQueueFamilies = indices.graphicsFamily;
+        *(uniqueQueueFamilies + 1) = indices.presentFamily;
+    }
 
     VkDeviceQueueCreateInfo *queueCreateInfos = (VkDeviceQueueCreateInfo *) malloc(
             sizeof(VkDeviceQueueCreateInfo) * numberUniqueQueueFamilies);
@@ -457,7 +469,7 @@ bool createLogicalDevice() {
     }
 
     if (vkCreateDevice(physicalDevice, &createInfo, NULL, &logicalDevice) != VK_SUCCESS) {
-        fprintf(stderr, "failed to create logical device");
+        fprintf(stderr, "vulkan: failed to create logical device");
         return false;
     }
 
@@ -468,7 +480,7 @@ bool createLogicalDevice() {
 
 bool createSurface(GLFWwindow *window) {
     if (glfwCreateWindowSurface(instance, window, NULL, &surface) != VK_SUCCESS) {
-        fprintf(stderr, "failed to create window surface");
+        fprintf(stderr, "vulkan: failed to create window surface");
         return false;
     }
 
