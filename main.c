@@ -22,8 +22,8 @@ const int32_t IM_START = -1;
 const int32_t IM_END = 1;
 
 // output file dimensions
-const uint32_t WIDTH = 1920 * 2;
-const uint32_t HEIGHT = 1080 * 2;
+const uint32_t WIDTH_BMP = 1920 * 2;
+const uint32_t HEIGHT_BMP = 1080 * 2;
 
 static void error_callback(int error, const char *description);
 
@@ -77,14 +77,14 @@ uint32_t mandelbrot(struct Complex c) {
 
 void generate() {
     // allocate output data
-    struct IntColor *data = (struct IntColor *) malloc(sizeof(struct IntColor) * WIDTH * HEIGHT);
+    struct IntColor *data = (struct IntColor *) malloc(sizeof(struct IntColor) * WIDTH_BMP * HEIGHT_BMP);
 
-    for (uint32_t x = 0; x < WIDTH; ++x) {
-        for (uint32_t y = 0; y < HEIGHT; ++y) {
+    for (uint32_t x = 0; x < WIDTH_BMP; ++x) {
+        for (uint32_t y = 0; y < HEIGHT_BMP; ++y) {
             // convert pixel coordinate to complex number
             struct Complex c = {
-                    RE_START + (x / (double) WIDTH) * (RE_END - RE_START),
-                    IM_START + (y / (double) HEIGHT) * (IM_END - IM_START)
+                    RE_START + (x / (double) WIDTH_BMP) * (RE_END - RE_START),
+                    IM_START + (y / (double) HEIGHT_BMP) * (IM_END - IM_START)
             };
 
             // compute number of iterations
@@ -94,7 +94,7 @@ void generate() {
             struct RGB rgb = basecolor(m, MAX_ITER);
 
             // fill data
-            struct IntColor *intColor = data + y * WIDTH + x;
+            struct IntColor *intColor = data + y * WIDTH_BMP + x;
             intColor->a = 255;
             intColor->r = rgb.r;
             intColor->g = rgb.g;
@@ -103,7 +103,7 @@ void generate() {
     }
 
     // create the output file
-    struct Bitmap bitmap = createBitmap(data, WIDTH, HEIGHT);
+    struct Bitmap bitmap = createBitmap(data, WIDTH_BMP, HEIGHT_BMP);
     saveOutBitmap(bitmap, "test.bmp");
 }
 
@@ -118,7 +118,7 @@ int main() {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    window = glfwCreateWindow(800, 600, "Vulkan", NULL, NULL);
+    window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", NULL, NULL);
 
     if (!window) {
         glfwTerminate();
@@ -129,7 +129,7 @@ int main() {
     glfwSetKeyCallback(window, key_callback);
 
     // initialize vulkan
-    if (vulkanInit(window)) {
+    if (!vulkanInit(window)) {
         glfwTerminate();
         return 1;
     }
