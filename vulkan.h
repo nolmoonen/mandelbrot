@@ -32,6 +32,16 @@ const char **extensions;
 VkInstance instance;
 VkDebugUtilsMessengerEXT debugMessenger;
 
+VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+VkDevice logicalDevice;
+
+VkQueue graphicsQueue;
+
+struct QueueFamilyIndices {
+    int isComplete;
+    uint32_t graphicsFamily;
+};
+
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
                                       const VkAllocationCallbacks *pAllocator,
                                       VkDebugUtilsMessengerEXT *pDebugMessenger) {
@@ -206,6 +216,105 @@ void getextensions() {
     }
 }
 
+struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+    struct QueueFamilyIndices indices = {0, 0}; // initialize isComplete as 0
+
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
+
+    VkQueueFamilyProperties *queueFamilies = (VkQueueFamilyProperties *) malloc(
+            sizeof(VkQueueFamilyProperties) * queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
+
+    for (uint32_t i = 0; i < queueFamilyCount; ++i) {
+        VkQueueFamilyProperties queueFamily = *(queueFamilies + i);
+
+        if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            indices.graphicsFamily = i;
+            indices.isComplete = 1;
+        }
+
+        if (indices.isComplete) {
+            break;
+        }
+    }
+
+    return indices;
+}
+
+int isDeviceSuitable(VkPhysicalDevice device) {
+    struct QueueFamilyIndices indices = findQueueFamilies(device);
+
+    return indices.isComplete;
+}
+
+int pickPhysicalDevice() {
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
+
+    if (deviceCount == 0) {
+        fprintf(stdout, "vulkan: failed to find GPUs with Vulkan support");
+        return 1;
+    }
+
+    VkPhysicalDevice *devices = (VkPhysicalDevice *) malloc(sizeof(VkPhysicalDevice) * deviceCount);
+    vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
+
+    for (uint32_t i = 0; i < deviceCount; ++i) {
+        VkPhysicalDevice device = *(devices + i);
+        if (isDeviceSuitable(device)) {
+            physicalDevice = device;
+            break;
+        }
+    }
+
+    if (physicalDevice == VK_NULL_HANDLE) {
+        fprintf(stdout, "failed to find a suitable GPU!");
+        return 1;
+    }
+
+    return 0;
+}
+
+int createLogicalDevice() {
+    struct QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+    VkDeviceQueueCreateInfo queueCreateInfo = {};
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily;
+    queueCreateInfo.queueCount = 1;
+
+    float queuePriority = 1.0f;
+    queueCreateInfo.pQueuePriorities = &queuePriority;
+
+    VkPhysicalDeviceFeatures deviceFeatures = {};
+
+    VkDeviceCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+    createInfo.pQueueCreateInfos = &queueCreateInfo;
+    createInfo.queueCreateInfoCount = 1;
+
+    createInfo.pEnabledFeatures = &deviceFeatures;
+
+    createInfo.enabledExtensionCount = 0;
+
+    if (enableValidationLayers) {
+        createInfo.enabledLayerCount = nrof_validationLayers;
+        createInfo.ppEnabledLayerNames = validationLayers;
+    } else {
+        createInfo.enabledLayerCount = 0;
+    }
+
+    if (vkCreateDevice(physicalDevice, &createInfo, NULL, &logicalDevice) != VK_SUCCESS) {
+        fprintf(stderr, "failed to create logical device");
+        return 1;
+    }
+
+    vkGetDeviceQueue(logicalDevice, indices.graphicsFamily, 0, &graphicsQueue);
+    return 0;
+}
+
 int vulkanInit() {
     if (createInstance()) {
         return 1;
@@ -215,12 +324,22 @@ int vulkanInit() {
         return 1;
     }
 
+    if (pickPhysicalDevice()) {
+        return 1;
+    }
+
+    if (createLogicalDevice()) {
+        return 1;
+    }
+
 //    getextensions();
 
     return 0;
 }
 
 void vulkanTerminate() {
+    vkDestroyDevice(logicalDevice, NULL);
+
     if (enableValidationLayers) {
         DestroyDebugUtilsMessengerEXT(instance, debugMessenger, NULL);
     }
