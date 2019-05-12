@@ -29,6 +29,8 @@ static void error_callback(int error, const char *description);
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
+static void framebuffer_resize_callback(GLFWwindow* window, int width, int height);
+
 /**
  * Calculates a HSV color based on iterations.
  */
@@ -116,7 +118,6 @@ int main() {
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", NULL, NULL);
 
@@ -127,6 +128,7 @@ int main() {
 
     glfwSetErrorCallback(error_callback);
     glfwSetKeyCallback(window, key_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_resize_callback);
 
     // initialize vulkan
     if (!vulkanInit(window)) {
@@ -139,6 +141,9 @@ int main() {
         glfwPollEvents();
         drawFrame();
     }
+
+    // wait until vulkan can be terminated
+    waitDeviceIdle();
 
     // clean up vulkan
     vulkanTerminate();
@@ -154,4 +159,8 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 
 static void error_callback(int error, const char *description) {
     fprintf(stderr, "error: %s\n", description);
+}
+
+static void framebuffer_resize_callback(GLFWwindow* window, int width, int height) {
+    framebufferResized = true;
 }

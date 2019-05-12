@@ -74,7 +74,11 @@ VkSemaphore *renderFinishedSemaphores;
 VkFence *inFlightFences;
 size_t currentFrame = 0;
 
+bool framebufferResized = false;
+
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
+GLFWwindow *window;
 
 struct QueueFamilyIndices {
     int graphicsFamilyHasValue;
@@ -93,56 +97,6 @@ struct SwapChainSupportDetails {
     VkPresentModeKHR *presentModes;
     uint32_t nrof_presentModes;
 };
-
-bool drawFrame() {
-    vkWaitForFences(logicalDevice, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-    vkResetFences(logicalDevice, 1, &inFlightFences[currentFrame]);
-
-    uint32_t imageIndex;
-    vkAcquireNextImageKHR(logicalDevice, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE,
-                          &imageIndex);
-
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-    VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
-    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
-
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
-
-    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-        fprintf(stderr, "vulkan: failed to submit draw command buffer\n");
-        return false;
-    }
-
-    VkPresentInfoKHR presentInfo = {};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
-    VkSwapchainKHR swapChains[] = {swapChain};
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-
-    presentInfo.pImageIndices = &imageIndex;
-
-    presentInfo.pResults = NULL; // Optional
-
-    vkQueuePresentKHR(presentQueue, &presentInfo);
-
-    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-
-    return true;
-}
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
                                       const VkAllocationCallbacks *pAllocator,
@@ -383,7 +337,10 @@ VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR capabilities) {
     if (capabilities.currentExtent.width != UINT32_MAX) {
         return capabilities.currentExtent;
     } else {
-        VkExtent2D actualExtent = {WIDTH, HEIGHT};
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+
+        VkExtent2D actualExtent = {(uint32_t) width, (uint32_t) height};
 
         actualExtent.width = max(capabilities.minImageExtent.width,
                                  min(capabilities.maxImageExtent.width, actualExtent.width));
@@ -547,7 +504,7 @@ bool createLogicalDevice() {
     return true;
 }
 
-bool createSurface(GLFWwindow *window) {
+bool createSurface() {
     if (glfwCreateWindowSurface(instance, window, NULL, &surface) != VK_SUCCESS) {
         fprintf(stderr, "vulkan: failed to create window surface");
         return false;
@@ -983,10 +940,55 @@ bool createSyncObjects() {
     return true;
 }
 
-bool vulkanInit(GLFWwindow *window) {
+void terminateSwapChain() {
+    for (uint32_t i = 0; i < nrof_swapChainImages; ++i) {
+        VkFramebuffer framebuffer = *(swapChainFramebuffers + i);
+        vkDestroyFramebuffer(logicalDevice, framebuffer, NULL);
+    }
+
+    vkFreeCommandBuffers(logicalDevice, commandPool, nrof_swapChainImages, commandBuffers);
+
+    vkDestroyPipeline(logicalDevice, graphicsPipeline, NULL);
+    vkDestroyPipelineLayout(logicalDevice, pipelineLayout, NULL);
+    vkDestroyRenderPass(logicalDevice, renderPass, NULL);
+
+    for (uint32_t i = 0; i < nrof_swapChainImages; ++i) {
+        VkImageView imageView = *(swapChainImageViews + i);
+        vkDestroyImageView(logicalDevice, imageView, NULL);
+    }
+
+    vkDestroySwapchainKHR(logicalDevice, swapChain, NULL);
+}
+
+void waitDeviceIdle() {
+    vkDeviceWaitIdle(logicalDevice);
+}
+
+bool recreateSwapChain() {
+    int width = 0, height = 0;
+    while (width == 0 || height == 0) {
+        glfwGetFramebufferSize(window, &width, &height);
+        glfwWaitEvents();
+    }
+
+    waitDeviceIdle();
+
+    terminateSwapChain();
+
+    if (!createSwapChain()) return false;
+    if (!createImageViews()) return false;
+    if (!createRenderPass()) return false;
+    if (!createGraphicsPipeline()) return false;
+    if (!createFrameBuffers()) return false;
+    if (!createCommandBuffers()) return false;
+}
+
+bool vulkanInit(GLFWwindow *pwindow) {
+    window = pwindow;
+
     if (!createInstance()) return false;
     if (!setupDebugMessenger()) return false;
-    if (!createSurface(window)) return false;
+    if (!createSurface()) return false;
     if (!pickPhysicalDevice()) return false;
     if (!createLogicalDevice()) return false;
     if (!createSwapChain()) return false;
@@ -1004,7 +1006,7 @@ bool vulkanInit(GLFWwindow *window) {
 }
 
 void vulkanTerminate() {
-    vkDeviceWaitIdle(logicalDevice);
+    terminateSwapChain();
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], NULL);
@@ -1014,21 +1016,6 @@ void vulkanTerminate() {
 
     vkDestroyCommandPool(logicalDevice, commandPool, NULL);
 
-    for (uint32_t i = 0; i < nrof_swapChainImages; ++i) {
-        VkFramebuffer framebuffer = *(swapChainFramebuffers + i);
-        vkDestroyFramebuffer(logicalDevice, framebuffer, NULL);
-    }
-
-    vkDestroyPipeline(logicalDevice, graphicsPipeline, NULL);
-    vkDestroyPipelineLayout(logicalDevice, pipelineLayout, NULL);
-    vkDestroyRenderPass(logicalDevice, renderPass, NULL);
-
-    for (uint32_t i = 0; i < nrof_swapChainImages; ++i) {
-        VkImageView imageView = *(swapChainImageViews + i);
-        vkDestroyImageView(logicalDevice, imageView, NULL);
-    }
-
-    vkDestroySwapchainKHR(logicalDevice, swapChain, NULL);
     vkDestroyDevice(logicalDevice, NULL);
 
     if (enableValidationLayers) {
@@ -1037,6 +1024,72 @@ void vulkanTerminate() {
 
     vkDestroySurfaceKHR(instance, surface, NULL);
     vkDestroyInstance(instance, NULL);
+}
+
+bool drawFrame() {
+    vkWaitForFences(logicalDevice, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+    uint32_t imageIndex;
+    VkResult result = vkAcquireNextImageKHR(logicalDevice, swapChain, UINT64_MAX,
+                                            imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        return recreateSwapChain();
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        fprintf(stderr, "vulkan: failed to acquire swap chain image\n");
+        return false;
+    }
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+
+    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+
+    vkResetFences(logicalDevice, 1, &inFlightFences[currentFrame]);
+
+    if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+        fprintf(stderr, "vulkan: failed to submit draw command buffer\n");
+        return false;
+    }
+
+    VkPresentInfoKHR presentInfo = {};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
+
+    VkSwapchainKHR swapChains[] = {swapChain};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+
+    presentInfo.pImageIndices = &imageIndex;
+
+    presentInfo.pResults = NULL; // Optional
+
+    result = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+        framebufferResized = false;
+        recreateSwapChain();
+    } else if (result != VK_SUCCESS) {
+        fprintf(stderr, "vulkan: failed to present swap chain image\n");
+        return false;
+    }
+
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+    return true;
 }
 
 #endif //VULKAN_H
