@@ -9,7 +9,10 @@
 
 #include <GLFW/glfw3.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
 #include "util.h"
+#include "math.h"
 
 #define WIDTH 800
 #define HEIGHT 600
@@ -80,6 +83,55 @@ const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
 GLFWwindow *window;
 
+VkBuffer vertexBuffer;
+VkDeviceMemory vertexBufferMemory;
+VkBuffer indexBuffer;
+VkDeviceMemory indexBufferMemory;
+
+typedef struct Vertex {
+    vec2f pos;
+    vec3f color;
+} Vertex;
+
+const Vertex vertices[] = {
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f,  -0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f,  0.5f},  {0.0f, 0.0f, 1.0f}},
+        {{-0.5f, 0.5f},  {1.0f, 1.0f, 1.0f}}
+};
+
+typedef uint16_t Index;
+
+const uint16_t indices[] = {
+        0, 1, 2, 2, 3, 0
+};
+
+static VkVertexInputBindingDescription getBindingDescription() {
+    VkVertexInputBindingDescription bindingDescription = {};
+    bindingDescription.binding = 0;
+    bindingDescription.stride = sizeof(Vertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    return bindingDescription;
+}
+
+static VkVertexInputAttributeDescription *getAttributeDescriptions() {
+    VkVertexInputAttributeDescription *attributeDescriptions = (VkVertexInputAttributeDescription *) malloc(
+            sizeof(VkVertexInputAttributeDescription) * 2);
+
+    attributeDescriptions[0].binding = 0;
+    attributeDescriptions[0].location = 0;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+    attributeDescriptions[1].binding = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+    return attributeDescriptions;
+}
+
 struct QueueFamilyIndices {
     int graphicsFamilyHasValue;
     uint32_t graphicsFamily;
@@ -125,7 +177,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
         void *pUserData) {
 
-    fprintf(stdout, "vulkan: validation layer %s\n", pCallbackData->pMessage);
+    fprintf(stdout, "vulkan: %s\n", pCallbackData->pMessage);
 
     return VK_FALSE;
 }
@@ -203,16 +255,16 @@ int checkValidationLayerSupport() {
         // one requested layer was not found
         if (!found) {
             fprintf(stderr, "vulkan: could not find requested validation layer %s\n", *(validationLayers + i));
-            return 1;
+            return false;
         }
     }
 
 
-    return 0;
+    return true;
 }
 
 bool createInstance() {
-    if (enableValidationLayers && checkValidationLayerSupport()) {
+    if (enableValidationLayers && !checkValidationLayerSupport()) {
         fprintf(stderr, "vulkan: validation layers requested, but not available\n");
         return false;
     }
@@ -247,26 +299,15 @@ bool createInstance() {
     }
 
     if (vkCreateInstance(&createInfo, NULL, &instance) != VK_SUCCESS) {
-        fprintf(stderr, "vulkan: failed to create instance");
+        fprintf(stderr, "vulkan: failed to create instance\n");
         return false;
     }
 
     return true;
 }
 
-void getextensions() {
-    uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, NULL);
-    VkExtensionProperties *ext = (VkExtensionProperties *) malloc(sizeof(VkExtensionProperties) * extensionCount);
-    vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, ext);
-
-    for (uint32_t i = 0; i < extensionCount; ++i) {
-        fprintf(stdout, "vulkan: found extension %s\n", &(*(ext + i)->extensionName));
-    }
-}
-
 struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
-    struct QueueFamilyIndices indices = QUEUE_FAMILY_INDICES; // default values
+    struct QueueFamilyIndices queueFamilyIndices = QUEUE_FAMILY_INDICES; // default values
 
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
@@ -279,25 +320,25 @@ struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
         VkQueueFamilyProperties queueFamily = *(queueFamilies + i);
 
         if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.graphicsFamily = i;
-            indices.graphicsFamilyHasValue = 1;
+            queueFamilyIndices.graphicsFamily = i;
+            queueFamilyIndices.graphicsFamilyHasValue = 1;
         }
 
         VkBool32 presentSupport = false;
         vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
         if (queueFamily.queueCount > 0 && presentSupport) {
-            indices.presentFamily = i;
-            indices.presentFamilyHasValue = 1;
+            queueFamilyIndices.presentFamily = i;
+            queueFamilyIndices.presentFamilyHasValue = 1;
         }
 
-        // some combination of indices works
-        if (indices.graphicsFamilyHasValue && indices.presentFamilyHasValue) {
+        // some combination of queueFamilyIndices works
+        if (queueFamilyIndices.graphicsFamilyHasValue && queueFamilyIndices.presentFamilyHasValue) {
             break;
         }
     }
 
-    return indices;
+    return queueFamilyIndices;
 }
 
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR *availableFormats, uint32_t nrof_availableFormats) {
@@ -305,7 +346,6 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR *availableFormats,
         VkSurfaceFormatKHR vkSurfaceFormatKhr = {VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
         return vkSurfaceFormatKhr;
     }
-
 
     for (uint32_t i = 0; i < nrof_availableFormats; ++i) {
         VkSurfaceFormatKHR availableFormat = *(availableFormats + i);
@@ -419,7 +459,7 @@ bool pickPhysicalDevice() {
     vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
 
     if (deviceCount == 0) {
-        fprintf(stdout, "vulkan: failed to find GPUs with Vulkan support");
+        fprintf(stderr, "vulkan: failed to find GPUs with Vulkan support\n");
         return false;
     }
 
@@ -435,7 +475,7 @@ bool pickPhysicalDevice() {
     }
 
     if (physicalDevice == VK_NULL_HANDLE) {
-        fprintf(stdout, "failed to find a suitable GPU!");
+        fprintf(stderr, "vulkan: failed to find a suitable GPU\n");
         return false;
     }
 
@@ -495,7 +535,7 @@ bool createLogicalDevice() {
     }
 
     if (vkCreateDevice(physicalDevice, &createInfo, NULL, &logicalDevice) != VK_SUCCESS) {
-        fprintf(stderr, "vulkan: failed to create logical device");
+        fprintf(stderr, "vulkan: failed to create logical device\n");
         return false;
     }
 
@@ -506,7 +546,7 @@ bool createLogicalDevice() {
 
 bool createSurface() {
     if (glfwCreateWindowSurface(instance, window, NULL, &surface) != VK_SUCCESS) {
-        fprintf(stderr, "vulkan: failed to create window surface");
+        fprintf(stderr, "vulkan: failed to create window surface\n");
         return false;
     }
 
@@ -557,7 +597,7 @@ bool createSwapChain() {
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
     if (vkCreateSwapchainKHR(logicalDevice, &createInfo, NULL, &swapChain) != VK_SUCCESS) {
-        fprintf(stderr, "failed to create swap chain!");
+        fprintf(stderr, "failed to create swap chain\n");
         return false;
     }
 
@@ -592,7 +632,7 @@ bool createImageViews() {
         createInfo.subresourceRange.layerCount = 1;
 
         if (vkCreateImageView(logicalDevice, &createInfo, NULL, &swapChainImageViews[i]) != VK_SUCCESS) {
-            fprintf(stderr, "vulkan: failed to create image views");
+            fprintf(stderr, "vulkan: failed to create image views\n");
             return false;
         }
     }
@@ -608,7 +648,7 @@ VkShaderModule createShaderModule(const char *code, uint32_t codeSize) {
 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(logicalDevice, &createInfo, NULL, &shaderModule) != VK_SUCCESS) {
-        fprintf(stderr, "vulkan: failed to create shader module");
+        fprintf(stderr, "vulkan: failed to create shader module\n");
         return false;
     }
 
@@ -648,8 +688,14 @@ bool createGraphicsPipeline() {
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 0;
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+
+    VkVertexInputBindingDescription bindingDescription = getBindingDescription();
+    VkVertexInputAttributeDescription *attributeDescriptions = getAttributeDescriptions();
+
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.vertexAttributeDescriptionCount = (uint32_t) (2); // hardcoded
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
     /*
      * Input assembly
@@ -740,7 +786,7 @@ bool createGraphicsPipeline() {
     pipelineLayoutInfo.pushConstantRangeCount = 0;
 
     if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS) {
-        fprintf(stdout, "vulkan: failed to create pipeline layout\n");
+        fprintf(stderr, "vulkan: failed to create pipeline layout\n");
         return false;
     }
 
@@ -761,7 +807,7 @@ bool createGraphicsPipeline() {
 
     if (vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline) !=
         VK_SUCCESS) {
-        fprintf(stdout, "vulkan: failed to create graphics pipeline\n");
+        fprintf(stderr, "vulkan: failed to create graphics pipeline\n");
         return false;
     }
 
@@ -900,11 +946,19 @@ bool createCommandBuffers() {
         renderPassInfo.pClearValues = &clearColor;
 
         vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        {
 
-        vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+            vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-        vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+            VkBuffer vertexBuffers[] = {vertexBuffer};
+            VkDeviceSize offsets[] = {0};
+            vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
 
+            vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+            vkCmdDrawIndexed(commandBuffers[i], (uint32_t) (sizeof(indices) / sizeof(Index)), 1, 0, 0, 0);
+
+        }
         vkCmdEndRenderPass(commandBuffers[i]);
 
         if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
@@ -960,6 +1014,133 @@ void terminateSwapChain() {
     vkDestroySwapchainKHR(logicalDevice, swapChain, NULL);
 }
 
+uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    fprintf(stderr, "vulkan: failed to find suitable memory type\n");
+    return -1; // todo
+}
+
+void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+    VkCommandBufferAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = commandPool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+    VkBufferCopy copyRegion = {};
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphicsQueue);
+
+    vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
+}
+
+bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer,
+                  VkDeviceMemory *bufferMemory) {
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(logicalDevice, &bufferInfo, NULL, buffer) != VK_SUCCESS) {
+        fprintf(stderr, "vulkan: failed to create buffer\n");
+        return false;
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(logicalDevice, *buffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    if (vkAllocateMemory(logicalDevice, &allocInfo, NULL, bufferMemory) != VK_SUCCESS) {
+        fprintf(stderr, "vulkan: failed to allocate buffer memory\n");
+        return false;
+    }
+
+    vkBindBufferMemory(logicalDevice, *buffer, *bufferMemory, 0);
+    return true;
+}
+
+bool createVertexBuffer() {
+    VkDeviceSize bufferSize = sizeof(vertices);
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer,
+                 &stagingBufferMemory);
+
+    void *data;
+    vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, vertices, (size_t) bufferSize);
+    vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferMemory);
+
+    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
+    vkDestroyBuffer(logicalDevice, stagingBuffer, NULL);
+    vkFreeMemory(logicalDevice, stagingBufferMemory, NULL);
+
+    return true;
+}
+
+bool createIndexBuffer() {
+    VkDeviceSize bufferSize = sizeof(indices);
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer,
+                 &stagingBufferMemory);
+
+    void *data;
+    vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, indices, (size_t) bufferSize);
+    vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory);
+
+    copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+
+    vkDestroyBuffer(logicalDevice, stagingBuffer, NULL);
+    vkFreeMemory(logicalDevice, stagingBufferMemory, NULL);
+
+    return true;
+}
+
 void waitDeviceIdle() {
     vkDeviceWaitIdle(logicalDevice);
 }
@@ -981,6 +1162,8 @@ bool recreateSwapChain() {
     if (!createGraphicsPipeline()) return false;
     if (!createFrameBuffers()) return false;
     if (!createCommandBuffers()) return false;
+
+    return true;
 }
 
 bool vulkanInit(GLFWwindow *pwindow) {
@@ -997,16 +1180,22 @@ bool vulkanInit(GLFWwindow *pwindow) {
     if (!createGraphicsPipeline()) return false;
     if (!createFrameBuffers()) return false;
     if (!createCommandPool()) return false;
+    if (!createVertexBuffer()) return false;
+    if (!createIndexBuffer()) return false;
     if (!createCommandBuffers()) return false;
     if (!createSyncObjects()) return false;
-
-//    getextensions();
 
     return true;
 }
 
 void vulkanTerminate() {
     terminateSwapChain();
+
+    vkDestroyBuffer(logicalDevice, indexBuffer, NULL);
+    vkFreeMemory(logicalDevice, indexBufferMemory, NULL);
+
+    vkDestroyBuffer(logicalDevice, vertexBuffer, NULL);
+    vkFreeMemory(logicalDevice, vertexBufferMemory, NULL);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], NULL);
