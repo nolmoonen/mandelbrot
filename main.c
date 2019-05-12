@@ -137,6 +137,7 @@ int main() {
     // main loop
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        drawFrame();
     }
 
     // clean up vulkan
