@@ -3,7 +3,7 @@ project(mandelbrot C)
 
 set(CMAKE_C_STANDARD 99)
 
-add_executable(mandelbrot main.c vulkan.h)
+add_executable(mandelbrot main.c vulkan.h stb_image.h)
 
 # add glfw library
 add_subdirectory(${PROJECT_SOURCE_DIR}/glfw)
