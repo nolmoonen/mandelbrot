@@ -121,7 +121,7 @@ const Vertex vertices[] = {
 typedef uint16_t Index;
 
 const uint16_t indices[] = {
-        0, 1, 2, 2, 3, 0
+        0, 2, 1, 2, 0, 3
 };
 
 static VkVertexInputBindingDescription getBindingDescription() {
