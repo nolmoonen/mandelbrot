@@ -109,6 +109,12 @@ size_t currentFrame = 0;
 
 bool framebufferResized = false;
 
+typedef struct Texture {
+    uint8_t * data;
+    uint32_t width;
+    uint32_t height;
+} Texture;
+
 typedef struct Vertex {
     vec2f pos;
     vec3f color;
@@ -116,10 +122,10 @@ typedef struct Vertex {
 } Vertex;
 
 const Vertex vertices[] = {
-        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f,  -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f,  0.5f},  {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-        {{-0.5f, 0.5f},  {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+        {{-1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+        {{1.0f,  -1.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{1.0f,  1.0f},  {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+        {{-1.0f, 1.0f},  {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
 };
 
 typedef uint16_t Index;
@@ -1067,6 +1073,14 @@ bool createSyncObjects() {
     return true;
 }
 
+void terminateTexture() {
+    vkDestroySampler(logicalDevice, textureSampler, NULL);
+    vkDestroyImageView(logicalDevice, textureImageView, NULL);
+
+    vkDestroyImage(logicalDevice, textureImage, NULL);
+    vkFreeMemory(logicalDevice, textureImageMemory, NULL);
+}
+
 void terminateSwapChain() {
     vkDestroyImageView(logicalDevice, colorImageView, NULL);
     vkDestroyImage(logicalDevice, colorImage, NULL);
@@ -1364,15 +1378,8 @@ bool createColorResources() {
     return true;
 }
 
-bool createTextureImage() {
-    int texWidth, texHeight, texChannels;
-    stbi_uc *pixels = stbi_load("../textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-    if (!pixels) {
-        fprintf(stderr, "vulkan: failed to load texture image\n");
-        return false;
-    }
+bool createTextureImage(Texture *texture) {
+    VkDeviceSize imageSize = texture->width * texture->height * 4;
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
@@ -1383,18 +1390,16 @@ bool createTextureImage() {
 
     void *data;
     vkMapMemory(logicalDevice, stagingBufferMemory, 0, imageSize, 0, &data);
-    memcpy(data, pixels, (size_t) (imageSize));
+    memcpy(data, texture->data, (size_t) (imageSize));
     vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
-    stbi_image_free(pixels);
-
-    createImage(texWidth, texHeight, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
+    createImage(texture->width, texture->height, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 &textureImage, &textureImageMemory);
 
     transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(stagingBuffer, textureImage, (uint32_t) (texWidth), (uint32_t) (texHeight));
+    copyBufferToImage(stagingBuffer, textureImage, texture->width, texture->height);
     transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
@@ -1515,7 +1520,7 @@ bool createDescriptorSetLayout() {
     return true;
 }
 
-bool recreateSwapChain() {
+bool recreateSwapChain(Texture* texture) {
     int width = 0, height = 0;
     while (width == 0 || height == 0) {
         glfwGetFramebufferSize(window, &width, &height);
@@ -1532,7 +1537,13 @@ bool recreateSwapChain() {
     if (!createGraphicsPipeline()) return false;
     if (!createColorResources()) return false;
     if (!createFrameBuffers()) return false;
-    // createUniformBuffers
+
+    terminateTexture();
+
+    if (!createTextureImage(texture)) return false;
+    if (!createTextureImageView()) return false;
+    if (!createTextureSampler()) return false;
+
     if (!createDescriptorPool()) return false;
     if (!createDescriptorSets()) return false;
     if (!createCommandBuffers()) return false;
@@ -1540,7 +1551,7 @@ bool recreateSwapChain() {
     return true;
 }
 
-bool vulkanInit(GLFWwindow *pwindow) {
+bool vulkanInit(GLFWwindow *pwindow, Texture *texture) {
     window = pwindow;
 
     if (!createInstance()) return false;
@@ -1557,7 +1568,7 @@ bool vulkanInit(GLFWwindow *pwindow) {
     if (!createColorResources()) return false;
     if (!createFrameBuffers()) return false;
 
-    if (!createTextureImage()) return false;
+    if (!createTextureImage(texture)) return false;
     if (!createTextureImageView()) return false;
     if (!createTextureSampler()) return false;
 
@@ -1607,7 +1618,7 @@ void vulkanTerminate() {
     vkDestroyInstance(instance, NULL);
 }
 
-bool drawFrame() {
+bool drawFrame(Texture *texture) {
     vkWaitForFences(logicalDevice, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
     uint32_t imageIndex;
@@ -1615,7 +1626,7 @@ bool drawFrame() {
                                             imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        return recreateSwapChain();
+        return recreateSwapChain(texture);
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         fprintf(stderr, "vulkan: failed to acquire swap chain image\n");
         return false;
@@ -1660,7 +1671,7 @@ bool drawFrame() {
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
         framebufferResized = false;
-        recreateSwapChain();
+        recreateSwapChain(texture);
     } else if (result != VK_SUCCESS) {
         fprintf(stderr, "vulkan: failed to present swap chain image\n");
         return false;

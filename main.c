@@ -13,7 +13,7 @@
 #include "color.h"
 
 // limit to the number of iterations in the mandelbrot function
-const uint32_t MAX_ITER = 400;
+const uint32_t MAX_ITER = 80;
 
 // mandelbrot variables
 const int32_t RE_START = -2;
@@ -29,7 +29,7 @@ static void error_callback(int error, const char *description);
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
-static void framebuffer_resize_callback(GLFWwindow* window, int width, int height);
+static void framebuffer_resize_callback(GLFWwindow *window, int width, int height);
 
 /**
  * Calculates a HSV color based on iterations.
@@ -77,16 +77,13 @@ uint32_t mandelbrot(struct Complex c) {
     return n;
 }
 
-void generate() {
-    // allocate output data
-    struct IntColor *data = (struct IntColor *) malloc(sizeof(struct IntColor) * WIDTH_BMP * HEIGHT_BMP);
-
-    for (uint32_t x = 0; x < WIDTH_BMP; ++x) {
-        for (uint32_t y = 0; y < HEIGHT_BMP; ++y) {
+void generate(Texture *texture) {
+    for (uint32_t x = 0; x < texture->width; ++x) {
+        for (uint32_t y = 0; y < texture->height; ++y) {
             // convert pixel coordinate to complex number
             struct Complex c = {
-                    RE_START + (x / (double) WIDTH_BMP) * (RE_END - RE_START),
-                    IM_START + (y / (double) HEIGHT_BMP) * (IM_END - IM_START)
+                    RE_START + (x / (double) texture->width) * (RE_END - RE_START),
+                    IM_START + (y / (double) texture->height) * (IM_END - IM_START)
             };
 
             // compute number of iterations
@@ -96,18 +93,22 @@ void generate() {
             struct RGB rgb = basecolor(m, MAX_ITER);
 
             // fill data
-            struct IntColor *intColor = data + y * WIDTH_BMP + x;
-            intColor->a = 255;
-            intColor->r = rgb.r;
-            intColor->g = rgb.g;
-            intColor->b = rgb.b;
+            *(texture->data + (y * texture->width + x) * 4 + 0) = rgb.r;
+            *(texture->data + (y * texture->width + x) * 4 + 1) = rgb.g;
+            *(texture->data + (y * texture->width + x) * 4 + 2) = rgb.b;
+            *(texture->data + (y * texture->width + x) * 4 + 3) = 255; // a
         }
     }
-
-    // create the output file
-    struct Bitmap bitmap = createBitmap(data, WIDTH_BMP, HEIGHT_BMP);
-    saveOutBitmap(bitmap, "test.bmp");
 }
+
+void generateTexture(Texture *texture, uint32_t width, uint32_t height) {
+    texture->width = width;
+    texture->height = height;
+    texture->data = (uint8_t *) malloc(sizeof(uint8_t) * texture->width * texture->height * 4);
+    generate(texture);
+}
+
+Texture *texture;
 
 int main() {
     GLFWwindow *window;
@@ -130,16 +131,22 @@ int main() {
     glfwSetKeyCallback(window, key_callback);
     glfwSetFramebufferSizeCallback(window, framebuffer_resize_callback);
 
+    // generate first texture
+    texture = (Texture *) malloc(sizeof(Texture));
+    generateTexture(texture, WIDTH, HEIGHT);
+
     // initialize vulkan
-    if (!vulkanInit(window)) {
+    if (!vulkanInit(window, texture)) {
         glfwTerminate();
         return 1;
     }
 
+    // draw the first frame
+    drawFrame(texture);
+
     // main loop
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
-        drawFrame();
     }
 
     // wait until vulkan can be terminated
@@ -161,6 +168,15 @@ static void error_callback(int error, const char *description) {
     fprintf(stderr, "error: %s\n", description);
 }
 
-static void framebuffer_resize_callback(GLFWwindow* window, int width, int height) {
-    framebufferResized = true;
+static void framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
+    fprintf(stdout, "generating texture for width %d and height %d\n", width, height);
+
+    texture = (Texture *) malloc(sizeof(Texture));
+    generateTexture(texture, width, height);
+
+    fprintf(stdout, "generating done!\n");
+
+//    framebufferResized = true;
+    recreateSwapChain(texture);
+    drawFrame(texture);
 }
