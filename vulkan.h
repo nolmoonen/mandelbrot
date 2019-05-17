@@ -53,6 +53,7 @@ VkDebugUtilsMessengerEXT debugMessenger;
 VkSurfaceKHR surface;
 
 VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 VkDevice logicalDevice;
 
 VkQueue graphicsQueue;
@@ -77,6 +78,9 @@ VkFramebuffer *swapChainFramebuffers;
 
 VkCommandPool commandPool;
 
+VkImage colorImage;
+VkDeviceMemory colorImageMemory;
+VkImageView colorImageView;
 
 VkImage textureImage;
 VkDeviceMemory textureImageMemory;
@@ -153,6 +157,22 @@ static VkVertexInputAttributeDescription *getAttributeDescriptions() {
     attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
 
     return attributeDescriptions;
+}
+
+VkSampleCountFlagBits getMaxUsableSampleCount() {
+    VkPhysicalDeviceProperties physicalDeviceProperties;
+    vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
+
+    VkSampleCountFlags counts = min(physicalDeviceProperties.limits.framebufferColorSampleCounts,
+                                    physicalDeviceProperties.limits.framebufferDepthSampleCounts);
+    if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
+    if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
+    if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
+    if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+    if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
+    if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
+
+    return VK_SAMPLE_COUNT_1_BIT;
 }
 
 struct QueueFamilyIndices {
@@ -508,6 +528,7 @@ bool pickPhysicalDevice() {
         VkPhysicalDevice device = *(devices + i);
         if (isDeviceSuitable(device)) {
             physicalDevice = device;
+            msaaSamples = getMaxUsableSampleCount();
             break;
         }
     }
@@ -651,13 +672,13 @@ bool createSwapChain() {
     return true;
 }
 
-VkImageView createImageView(VkImage image, VkFormat format) {
+VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
     VkImageViewCreateInfo viewInfo = {};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
@@ -675,7 +696,7 @@ bool createImageViews() {
     swapChainImageViews = (VkImageView *) malloc(sizeof(VkImageView) * nrof_swapChainImages);
 
     for (size_t i = 0; i < nrof_swapChainImages; i++) {
-        swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat);
+        swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     return true;
@@ -793,11 +814,7 @@ bool createGraphicsPipeline() {
     VkPipelineMultisampleStateCreateInfo multisampling = {};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    multisampling.minSampleShading = 1.0f; // Optional
-    multisampling.pSampleMask = NULL; // Optional
-    multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
-    multisampling.alphaToOneEnable = VK_FALSE; // Optional
+    multisampling.rasterizationSamples = msaaSamples;
 
     /*
      * Color blending
@@ -861,22 +878,37 @@ bool createGraphicsPipeline() {
 bool createRenderPass() {
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format = swapChainImageFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.samples = msaaSamples;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentDescription colorAttachmentResolve = {};
+    colorAttachmentResolve.format = swapChainImageFormat;
+    colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentReference colorAttachmentRef = {};
     colorAttachmentRef.attachment = 0;
     colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentReference colorAttachmentResolveRef = {};
+    colorAttachmentResolveRef.attachment = 1;
+    colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
     VkSubpassDescription subpass = {};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
     VkSubpassDependency dependency = {};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -886,10 +918,11 @@ bool createRenderPass() {
     dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
+    VkAttachmentDescription attachments[] = {colorAttachment, colorAttachmentResolve};
     VkRenderPassCreateInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.attachmentCount = 2; // todo hardcoded
+    renderPassInfo.pAttachments = attachments;
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
     renderPassInfo.dependencyCount = 1;
@@ -907,14 +940,11 @@ bool createFrameBuffers() {
     swapChainFramebuffers = (VkFramebuffer *) malloc(sizeof(VkFramebuffer) * nrof_swapChainImages);
 
     for (size_t i = 0; i < nrof_swapChainImages; i++) {
-        VkImageView attachments[] = {
-                swapChainImageViews[i]
-        };
-
+        VkImageView attachments[] = {colorImageView, swapChainImageViews[i]};
         VkFramebufferCreateInfo framebufferInfo = {};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.attachmentCount = 2; // todo hardcoded
         framebufferInfo.pAttachments = attachments;
         framebufferInfo.width = swapChainExtent.width;
         framebufferInfo.height = swapChainExtent.height;
@@ -1038,6 +1068,10 @@ bool createSyncObjects() {
 }
 
 void terminateSwapChain() {
+    vkDestroyImageView(logicalDevice, colorImageView, NULL);
+    vkDestroyImage(logicalDevice, colorImage, NULL);
+    vkFreeMemory(logicalDevice, colorImageMemory, NULL);
+
     for (uint32_t i = 0; i < nrof_swapChainImages; ++i) {
         VkFramebuffer framebuffer = *(swapChainFramebuffers + i);
         vkDestroyFramebuffer(logicalDevice, framebuffer, NULL);
@@ -1253,6 +1287,11 @@ bool transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayo
 
         sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     } else {
         fprintf(stderr, "vulkan: unsupported layout transition\n");
         return false;
@@ -1272,8 +1311,9 @@ bool transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayo
     return true;
 }
 
-bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-                 VkMemoryPropertyFlags properties, VkImage *image, VkDeviceMemory *imageMemory) {
+bool createImage(uint32_t width, uint32_t height, VkSampleCountFlagBits numSamples, VkFormat format,
+                 VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage *image,
+                 VkDeviceMemory *imageMemory) {
     VkImageCreateInfo imageInfo = {};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -1286,7 +1326,7 @@ bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling
     imageInfo.tiling = tiling;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = usage;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.samples = numSamples;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     if (vkCreateImage(logicalDevice, &imageInfo, NULL, image) != VK_SUCCESS) {
@@ -1308,6 +1348,19 @@ bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling
     }
 
     vkBindImageMemory(logicalDevice, *image, *imageMemory, 0);
+    return true;
+}
+
+bool createColorResources() {
+    VkFormat colorFormat = swapChainImageFormat;
+
+    createImage(swapChainExtent.width, swapChainExtent.height, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &colorImage, &colorImageMemory);
+    colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    transitionImageLayout(colorImage, colorFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
     return true;
 }
 
@@ -1335,7 +1388,7 @@ bool createTextureImage() {
 
     stbi_image_free(pixels);
 
-    createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
+    createImage(texWidth, texHeight, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 &textureImage, &textureImageMemory);
 
@@ -1352,7 +1405,7 @@ bool createTextureImage() {
 }
 
 bool createTextureImageView() {
-    textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_UNORM);
+    textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
 
     return true;
 }
@@ -1477,6 +1530,7 @@ bool recreateSwapChain() {
     if (!createImageViews()) return false;
     if (!createRenderPass()) return false;
     if (!createGraphicsPipeline()) return false;
+    if (!createColorResources()) return false;
     if (!createFrameBuffers()) return false;
     // createUniformBuffers
     if (!createDescriptorPool()) return false;
@@ -1499,8 +1553,9 @@ bool vulkanInit(GLFWwindow *pwindow) {
     if (!createRenderPass()) return false;
     if (!createDescriptorSetLayout()) return false;
     if (!createGraphicsPipeline()) return false;
-    if (!createFrameBuffers()) return false;
     if (!createCommandPool()) return false;
+    if (!createColorResources()) return false;
+    if (!createFrameBuffers()) return false;
 
     if (!createTextureImage()) return false;
     if (!createTextureImageView()) return false;
@@ -1508,7 +1563,7 @@ bool vulkanInit(GLFWwindow *pwindow) {
 
     if (!createVertexBuffer()) return false;
     if (!createIndexBuffer()) return false;
-    // createUniformBuffers
+
     if (!createDescriptorPool()) return false;
     if (!createDescriptorSets()) return false;
     if (!createCommandBuffers()) return false;
