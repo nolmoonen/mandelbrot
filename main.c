@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 #include "vulkan.h"
 #include "bmp.h"
@@ -21,9 +22,6 @@ const int32_t RE_END = 1;
 const int32_t IM_START = -1;
 const int32_t IM_END = 1;
 
-// output file dimensions
-const uint32_t WIDTH_BMP = 1920 * 2;
-const uint32_t HEIGHT_BMP = 1080 * 2;
 
 static void error_callback(int error, const char *description);
 
@@ -144,9 +142,21 @@ int main() {
     // draw the first frame
     drawFrame(texture);
 
+    // create circular buffer for title
+    CircularTickBuffer *circularBuffer = (CircularTickBuffer *) malloc(sizeof(CircularTickBuffer));
+    tick_buffer_init(circularBuffer, 20000, CLOCKS_PER_SEC);
+
     // main loop
     while (!glfwWindowShouldClose(window)) {
+        tick_buffer_add(circularBuffer, clock());
         glfwPollEvents();
+        drawFrame(texture);
+
+        // create and display title
+        char title[256];
+        title[255] = '\0';
+        snprintf(title, 255, "fps: %d", tick_buffer_query(circularBuffer, clock()));
+        glfwSetWindowTitle(window, title);
     }
 
     // wait until vulkan can be terminated

@@ -63,4 +63,45 @@ static uint32_t fileSize(const char *filename) {
     return 0;
 }
 
+typedef struct CircularTickBuffer {
+    uint64_t size;      // amount of timestamps stored
+    uint64_t dt;        // period in seconds over which to return timestamps
+    clock_t *array;     // array of timestamps in seconds
+    uint64_t pointer;   // index of next timestamp to add
+} CircularTickBuffer;
+
+/**
+ * Initializes the buffer.
+ */
+void tick_buffer_init(CircularTickBuffer *circularBuffer, uint64_t size, uint64_t dt) {
+    circularBuffer->size = size;
+    circularBuffer->dt = dt;
+    circularBuffer->array = (clock_t *) malloc(sizeof(clock_t) * circularBuffer->size);
+    circularBuffer->pointer = 0;
+}
+
+/**
+ * Adds a timestamp to the array.
+ */
+void tick_buffer_add(CircularTickBuffer *circularBuffer, clock_t value) {
+    circularBuffer->array[circularBuffer->pointer++] = value;
+    circularBuffer->pointer %= circularBuffer->size;
+}
+
+/**
+ * Returns the amount of timestamps within dt distance from value.
+ */
+uint64_t tick_buffer_query(CircularTickBuffer *circularBuffer, clock_t value) {
+    uint64_t pointerClone = circularBuffer->pointer;
+    uint64_t count = (uint64_t) -1;
+
+    do {
+        // set pointer to last added item
+        pointerClone = (pointerClone + circularBuffer->size - 1) % circularBuffer->size;
+        count++;
+    } while (count != circularBuffer->size && value - circularBuffer->array[pointerClone] <= circularBuffer->dt);
+
+    return count;
+}
+
 #endif //MANDELBROT_UTIL_H
