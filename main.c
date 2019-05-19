@@ -22,12 +22,24 @@ const int32_t RE_END = 1;
 const int32_t IM_START = -1;
 const int32_t IM_END = 1;
 
+uint32_t width = WIDTH; // width of the screen
+uint32_t height = HEIGHT; // height of the screen
+
+double xpos, ypos; // position of the mouse
+double clicked_xpos, clicked_ypos; // position of the mouse pressed down
+double release_xpos, release_ypos; // position of the mouse released
+
+bool selecting = false; // whether something is being selected
 
 static void error_callback(int error, const char *description);
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
 static void framebuffer_resize_callback(GLFWwindow *window, int width, int height);
+
+static void cursor_position_callback(GLFWwindow *window, double pxpos, double pypos);
+
+static void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 
 /**
  * Calculates a HSV color based on iterations.
@@ -45,7 +57,7 @@ struct RGB color(uint32_t n, uint32_t N) {
  * Calculates a RGB color based on iterations and a specified base color.
  */
 struct RGB basecolor(uint32_t n, uint32_t N) {
-    const struct RGB BASE = {0, 0, 255};
+    const struct RGB BASE = {255, 255, 255};
     const uint32_t THRESHOLD = 2;
 
     if (n > N / THRESHOLD) {
@@ -128,6 +140,8 @@ int main() {
     glfwSetErrorCallback(error_callback);
     glfwSetKeyCallback(window, key_callback);
     glfwSetFramebufferSizeCallback(window, framebuffer_resize_callback);
+    glfwSetCursorPosCallback(window, cursor_position_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
 
     // generate first texture
     texture = (Texture *) malloc(sizeof(Texture));
@@ -170,23 +184,81 @@ int main() {
     glfwTerminate();
 }
 
-static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, GLFW_TRUE);
+static void key_callback(GLFWwindow *pwindow, int key, int scancode, int action, int mods) {
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(pwindow, GLFW_TRUE);
+    if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
+
+        fprintf(stdout, "generating texture for width %d and height %d\n", width, height);
+
+        texture = (Texture *) malloc(sizeof(Texture));
+        generateTexture(texture, width, height);
+
+        fprintf(stdout, "generating done!\n");
+
+        recreateTexture();
+    }
 }
 
 static void error_callback(int error, const char *description) {
     fprintf(stderr, "error: %s\n", description);
 }
 
-static void framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
-    fprintf(stdout, "generating texture for width %d and height %d\n", width, height);
+static void cursor_position_callback(GLFWwindow *pwindow, double pxpos, double pypos) {
+    xpos = pxpos;
+    ypos = pypos;
 
-    texture = (Texture *) malloc(sizeof(Texture));
-    generateTexture(texture, width, height);
+    if (selecting) {
+        double xpos_screen = (xpos / width) * 2.0f - 1.0f;
+        double ypos_screen = (ypos / height) * 2.0f - 1.0f;
 
-    fprintf(stdout, "generating done!\n");
+//        vertices[4].pos.x = xpos_screen;
+//        vertices[4].pos.y = ypos_screen;
 
-//    framebufferResized = true;
-    recreateSwapChain(texture);
-    drawFrame(texture);
+        vertices[5].pos.x = xpos_screen;
+//        vertices[5].pos.y = ypos_screen;
+
+        vertices[6].pos.x = xpos_screen;
+        vertices[6].pos.y = ypos_screen;
+
+//        vertices[7].pos.x = xpos_screen;
+        vertices[7].pos.y = ypos_screen;
+
+        recreateVertices();
+    }
+}
+
+static void mouse_button_callback(GLFWwindow *pwindow, int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        double xpos_screen = (xpos / width) * 2.0f - 1.0f;
+        double ypos_screen = (ypos / height) * 2.0f - 1.0f;
+
+        vertices[4].pos.x = xpos_screen;
+        vertices[4].pos.y = ypos_screen;
+
+        vertices[5].pos.x = xpos_screen;
+        vertices[5].pos.y = ypos_screen;
+
+        vertices[6].pos.x = xpos_screen;
+        vertices[6].pos.y = ypos_screen;
+
+        vertices[7].pos.x = xpos_screen;
+        vertices[7].pos.y = ypos_screen;
+
+        fprintf(stdout, "click at %f, %f\n", xpos, ypos);
+
+        selecting = true;
+
+        recreateVertices();
+    }
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        fprintf(stdout, "release at %f, %f\n", xpos, ypos);
+        selecting = false;
+    }
+}
+
+static void framebuffer_resize_callback(GLFWwindow *pwindow, int pwidth, int pheight) {
+    height = pheight;
+    width = pwidth;
+
+    framebufferResized = true;
 }

@@ -104,4 +104,10 @@ uint64_t tick_buffer_query(CircularTickBuffer *circularBuffer, clock_t value) {
     return count;
 }
 
+typedef struct Texture {
+    uint8_t *data;
+    uint32_t width;
+    uint32_t height;
+} Texture;
+
 #endif //MANDELBROT_UTIL_H
