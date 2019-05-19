@@ -419,16 +419,22 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR *availableFormats,
 }
 
 VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR *availablePresentModes, uint32_t nrof_availablePresentNodes) {
-    VkPresentModeKHR bestMode = VK_PRESENT_MODE_FIFO_KHR;
+    VkPresentModeKHR bestMode = VK_PRESENT_MODE_MAILBOX_KHR;
 
     for (uint32_t i = 0; i < nrof_availablePresentNodes; ++i) {
         VkPresentModeKHR availablePresentMode = *(availablePresentModes + i);
-        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+        if (availablePresentMode == VK_PRESENT_MODE_FIFO_KHR) {
+            // debug
+            fprintf(stdout, "vulkan: swap present mode (best): %d\n", availablePresentMode);
+
             return availablePresentMode;
         } else if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
             bestMode = availablePresentMode;
         }
     }
+
+    // debug
+    fprintf(stdout, "vulkan: swap present mode (alternative): %d\n", bestMode);
 
     return bestMode;
 }
