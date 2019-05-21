@@ -187,13 +187,8 @@ int main() {
 static void key_callback(GLFWwindow *pwindow, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(pwindow, GLFW_TRUE);
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
-
-        fprintf(stdout, "generating texture for width %d and height %d\n", width, height);
-
         texture = (Texture *) malloc(sizeof(Texture));
         generateTexture(texture, width, height);
-
-        fprintf(stdout, "generating done!\n");
 
         recreateTexture();
     }
@@ -211,17 +206,17 @@ static void cursor_position_callback(GLFWwindow *pwindow, double pxpos, double p
         double xpos_screen = (xpos / width) * 2.0f - 1.0f;
         double ypos_screen = (ypos / height) * 2.0f - 1.0f;
 
-//        vertices[4].pos.x = xpos_screen;
-//        vertices[4].pos.y = ypos_screen;
+//        colored_quad_vertices[0].pos.x = xpos_screen;
+//        colored_quad_vertices[0].pos.y = ypos_screen;
 
-        vertices[5].pos.x = xpos_screen;
-//        vertices[5].pos.y = ypos_screen;
+        colored_quad_vertices[1].pos.x = xpos_screen;
+//        colored_quad_vertices[1].pos.y = ypos_screen;
 
-        vertices[6].pos.x = xpos_screen;
-        vertices[6].pos.y = ypos_screen;
+        colored_quad_vertices[2].pos.x = xpos_screen;
+        colored_quad_vertices[2].pos.y = ypos_screen;
 
-//        vertices[7].pos.x = xpos_screen;
-        vertices[7].pos.y = ypos_screen;
+//        colored_quad_vertices[3].pos.x = xpos_screen;
+        colored_quad_vertices[3].pos.y = ypos_screen;
 
         recreateVertices();
     }
@@ -232,26 +227,23 @@ static void mouse_button_callback(GLFWwindow *pwindow, int button, int action, i
         double xpos_screen = (xpos / width) * 2.0f - 1.0f;
         double ypos_screen = (ypos / height) * 2.0f - 1.0f;
 
-        vertices[4].pos.x = xpos_screen;
-        vertices[4].pos.y = ypos_screen;
+        colored_quad_vertices[0].pos.x = xpos_screen;
+        colored_quad_vertices[0].pos.y = ypos_screen;
 
-        vertices[5].pos.x = xpos_screen;
-        vertices[5].pos.y = ypos_screen;
+        colored_quad_vertices[1].pos.x = xpos_screen;
+        colored_quad_vertices[1].pos.y = ypos_screen;
 
-        vertices[6].pos.x = xpos_screen;
-        vertices[6].pos.y = ypos_screen;
+        colored_quad_vertices[2].pos.x = xpos_screen;
+        colored_quad_vertices[2].pos.y = ypos_screen;
 
-        vertices[7].pos.x = xpos_screen;
-        vertices[7].pos.y = ypos_screen;
-
-        fprintf(stdout, "click at %f, %f\n", xpos, ypos);
+        colored_quad_vertices[3].pos.x = xpos_screen;
+        colored_quad_vertices[3].pos.y = ypos_screen;
 
         selecting = true;
 
         recreateVertices();
     }
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
-        fprintf(stdout, "release at %f, %f\n", xpos, ypos);
         selecting = false;
     }
 }

@@ -67,12 +67,11 @@ VkExtent2D swapChainExtent;
 
 VkImageView *swapChainImageViews;
 
-VkPipelineLayout pipelineLayout;
-
 VkRenderPass renderPass;
 VkDescriptorSetLayout descriptorSetLayout;
-VkPipelineLayout pipelineLayout;
-VkPipeline graphicsPipeline;
+
+VkPipelineLayout *pipelineLayout;
+VkPipeline *graphicsPipeline;
 
 VkFramebuffer *swapChainFramebuffers;
 
@@ -90,13 +89,10 @@ VkSampler textureSampler;
 GLFWwindow *window;
 Texture *texture;
 
-VkBuffer vertexBuffer;
-VkDeviceMemory vertexBufferMemory;
-VkBuffer indexBuffer;
-VkDeviceMemory indexBufferMemory;
-
-//std::vector<VkBuffer> uniformBuffers;
-//std::vector<VkDeviceMemory> uniformBuffersMemory;
+VkBuffer *vertexBuffer;
+VkDeviceMemory *vertexBufferMemory;
+VkBuffer *indexBuffer;
+VkDeviceMemory *indexBufferMemory;
 
 VkDescriptorPool descriptorPool;
 VkDescriptorSet *descriptorSets;
@@ -116,35 +112,59 @@ typedef struct Vertex {
     vec2f texCoord;
 } Vertex;
 
-Vertex vertices[] = {
-        /*
-         * texture
-         */
+typedef uint16_t Index;
+
+Vertex textured_quad_vertices[] = {
         {{-1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
         {{1.0f,  -1.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
         {{1.0f,  1.0f},  {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
         {{-1.0f, 1.0f},  {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-        /*
-         * selection quad
-         */
-        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}, // top right
-        {{0.5f,  -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}}, // top left
-        {{0.5f,  0.5f},  {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // bottom right
-        {{-0.5f, 0.5f},  {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}, // bottom left
 };
 
-typedef uint16_t Index;
 
-const uint16_t indices[] = {
-        /*
-         * texture
-         */
+Index textured_quad_indices[] = {
         0, 2, 1, 2, 0, 3,
-        /*
-         * selection quad
-         */
-        4, 6, 5, 6, 4, 7,
-        4, 5, 6, 6, 7, 4,
+};
+
+Vertex colored_quad_vertices[] = {
+        {{-0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}}, // top right
+        {{0.5f,  -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}}, // top left
+        {{0.5f,  0.5f},  {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // bottom right
+        {{-0.5f, 0.5f},  {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom left
+};
+
+Index colored_quad_indices[] = {
+        0, 2, 1, 2, 0, 3,
+        // reverse order to deal with culling
+        0, 1, 2, 2, 3, 0,
+};
+
+typedef struct Object {
+    Vertex *vertices;
+    uint32_t nrof_vertices;
+    Index *indices;
+    uint32_t nrof_indices;
+    const char *vert_shader;
+    const char *frag_shader;
+} Object;
+
+Object objects[] = {
+        {
+                textured_quad_vertices,
+                sizeof(textured_quad_vertices) / sizeof(Vertex),
+                textured_quad_indices,
+                sizeof(textured_quad_indices) / sizeof(Index),
+                "../shaders/textured/vert.spv",
+                "../shaders/textured/frag.spv",
+        },
+        {
+                colored_quad_vertices,
+                sizeof(colored_quad_vertices) / sizeof(Vertex),
+                colored_quad_indices,
+                sizeof(colored_quad_indices) / sizeof(Index),
+                "../shaders/colored/vert.spv",
+                "../shaders/colored/frag.spv",
+        },
 };
 
 static VkVertexInputBindingDescription getBindingDescription() {
@@ -512,6 +532,7 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
         }
 
         if (!found) {
+            fprintf(stderr, "vulkan: extension could not be found\n");
             return false; // no success: an extension could not be found
         }
     }
@@ -742,10 +763,7 @@ VkShaderModule createShaderModule(const char *code, uint32_t codeSize) {
     return shaderModule;
 }
 
-bool createGraphicsPipeline() {
-    const char *vertShaderFileName = "../shaders/vert.spv";
-    const char *fragShaderFileName = "../shaders/frag.spv";
-
+bool createGraphicsPipeline(uint32_t index, const char *vertShaderFileName, const char *fragShaderFileName) {
     char *vertShaderCode = readFile(vertShaderFileName);
     char *fragShaderCode = readFile(fragShaderFileName);
 
@@ -847,7 +865,13 @@ bool createGraphicsPipeline() {
     VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
     colorBlendAttachment.colorWriteMask =
             VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_FALSE;
+    colorBlendAttachment.blendEnable = VK_TRUE;
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 
     VkPipelineColorBlendStateCreateInfo colorBlending = {};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -868,7 +892,7 @@ bool createGraphicsPipeline() {
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 
-    if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout[index]) != VK_SUCCESS) {
         fprintf(stderr, "vulkan: failed to create pipeline layout\n");
         return false;
     }
@@ -883,12 +907,12 @@ bool createGraphicsPipeline() {
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.layout = pipelineLayout[index];
     pipelineInfo.renderPass = renderPass;
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-    if (vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline) !=
+    if (vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline[index]) !=
         VK_SUCCESS) {
         fprintf(stderr, "vulkan: failed to create graphics pipeline\n");
         return false;
@@ -896,6 +920,19 @@ bool createGraphicsPipeline() {
 
     vkDestroyShaderModule(logicalDevice, fragShaderModule, NULL);
     vkDestroyShaderModule(logicalDevice, vertShaderModule, NULL);
+
+    return true;
+}
+
+bool createGraphicsPipelines() {
+    uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
+
+    graphicsPipeline = (VkPipeline *) malloc(sizeof(VkPipeline) * nrof_objects);
+    pipelineLayout = (VkPipelineLayout *) malloc(sizeof(VkPipelineLayout) * nrof_objects);
+
+    for (uint32_t i = 0; i < nrof_objects; ++i) {
+        if (!createGraphicsPipeline(i, objects[i].vert_shader, objects[i].frag_shader)) return false;
+    }
 
     return true;
 }
@@ -1043,19 +1080,20 @@ bool createCommandBuffers() {
 
         vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         {
+            uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
+            for (uint32_t j = 0; j < nrof_objects; ++j) {
+                vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline[j]);
 
-            vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+                VkDeviceSize offsets[] = {0};
+                vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, &vertexBuffer[j], offsets);
 
-            VkBuffer vertexBuffers[] = {vertexBuffer};
-            VkDeviceSize offsets[] = {0};
-            vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
+                vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer[j], 0, VK_INDEX_TYPE_UINT16);
 
-            vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+                vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout[j], 0, 1,
+                                        &descriptorSets[i], 0, NULL);
 
-            vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
-                                    &descriptorSets[i], 0, NULL);
-
-            vkCmdDrawIndexed(commandBuffers[i], (uint32_t) (sizeof(indices) / sizeof(Index)), 1, 0, 0, 0);
+                vkCmdDrawIndexed(commandBuffers[i], objects[j].nrof_indices, 1, 0, 0, 0);
+            }
         }
         vkCmdEndRenderPass(commandBuffers[i]);
 
@@ -1104,8 +1142,13 @@ void terminateSwapChain() {
 
     vkFreeCommandBuffers(logicalDevice, commandPool, nrof_swapChainImages, commandBuffers);
 
-    vkDestroyPipeline(logicalDevice, graphicsPipeline, NULL);
-    vkDestroyPipelineLayout(logicalDevice, pipelineLayout, NULL);
+    uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
+
+    for (uint32_t i = 0; i < nrof_objects; ++i) {
+        vkDestroyPipeline(logicalDevice, graphicsPipeline[i], NULL);
+        vkDestroyPipelineLayout(logicalDevice, pipelineLayout[i], NULL);
+    }
+
     vkDestroyRenderPass(logicalDevice, renderPass, NULL);
 
     for (uint32_t i = 0; i < nrof_swapChainImages; ++i) {
@@ -1205,8 +1248,8 @@ void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
     endSingleTimeCommands(commandBuffer);
 }
 
-bool createVertexBuffer() {
-    VkDeviceSize bufferSize = sizeof(vertices);
+bool createVertexBuffer(uint32_t index, Vertex *vertices, uint64_t buffer_size) {
+    VkDeviceSize bufferSize = buffer_size;
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
@@ -1220,9 +1263,9 @@ bool createVertexBuffer() {
     vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
     createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferMemory);
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer[index], &vertexBufferMemory[index]);
 
-    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+    copyBuffer(stagingBuffer, vertexBuffer[index], bufferSize);
 
     vkDestroyBuffer(logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(logicalDevice, stagingBufferMemory, NULL);
@@ -1230,8 +1273,21 @@ bool createVertexBuffer() {
     return true;
 }
 
-bool createIndexBuffer() {
-    VkDeviceSize bufferSize = sizeof(indices);
+bool createVertexBuffers() {
+    uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
+
+    vertexBuffer = (VkBuffer *) malloc(sizeof(VkBuffer) * nrof_objects);
+    vertexBufferMemory = (VkDeviceMemory *) malloc(sizeof(VkDeviceMemory) * nrof_objects);
+
+    for (uint32_t i = 0; i < nrof_objects; ++i) {
+        if (!createVertexBuffer(i, objects[i].vertices, objects[i].nrof_vertices * sizeof(Vertex))) return false;
+    }
+
+    return true;
+}
+
+bool createIndexBuffer(uint32_t index, Index *indices, uint64_t buffer_size) {
+    VkDeviceSize bufferSize = buffer_size;
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
@@ -1245,12 +1301,25 @@ bool createIndexBuffer() {
     vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
     createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory);
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer[index], &indexBufferMemory[index]);
 
-    copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+    copyBuffer(stagingBuffer, indexBuffer[index], bufferSize);
 
     vkDestroyBuffer(logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(logicalDevice, stagingBufferMemory, NULL);
+
+    return true;
+}
+
+bool createIndexBuffers() {
+    uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
+
+    indexBuffer = (VkBuffer *) malloc(sizeof(VkBuffer) * nrof_objects);
+    indexBufferMemory = (VkDeviceMemory *) malloc(sizeof(VkDeviceMemory) * nrof_objects);
+
+    for (uint32_t i = 0; i < nrof_objects; ++i) {
+        if (!createIndexBuffer(i, objects[i].indices, objects[i].nrof_indices * sizeof(Index))) return false;
+    }
 
     return true;
 }
@@ -1535,12 +1604,16 @@ bool createDescriptorSetLayout() {
 bool recreateVertices() {
     waitDeviceIdle();
 
-    vkDestroyBuffer(logicalDevice, vertexBuffer, NULL);
-    vkFreeMemory(logicalDevice, vertexBufferMemory, NULL);
+    uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
+
+    for (uint32_t i = 0; i < nrof_objects; ++i) {
+        vkDestroyBuffer(logicalDevice, vertexBuffer[i], NULL);
+        vkFreeMemory(logicalDevice, vertexBufferMemory[i], NULL);
+    }
 
     vkFreeCommandBuffers(logicalDevice, commandPool, nrof_swapChainImages, commandBuffers);
 
-    if (!createVertexBuffer()) return false;
+    if (!createVertexBuffers()) return false;
     if (!createCommandBuffers()) return false;
 }
 
@@ -1555,15 +1628,19 @@ bool recreateTexture() {
 
     vkFreeCommandBuffers(logicalDevice, commandPool, nrof_swapChainImages, commandBuffers);
 
-    vkDestroyPipeline(logicalDevice, graphicsPipeline, NULL);
-    vkDestroyPipelineLayout(logicalDevice, pipelineLayout, NULL);
+    uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
+
+    for (uint32_t i = 0; i < nrof_objects; ++i) {
+        vkDestroyPipeline(logicalDevice, graphicsPipeline[i], NULL);
+        vkDestroyPipelineLayout(logicalDevice, pipelineLayout[i], NULL);
+    }
 
     vkDestroyDescriptorPool(logicalDevice, descriptorPool, NULL);
 
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, NULL);
 
     if (!createDescriptorSetLayout()) return false;
-    if (!createGraphicsPipeline()) return false;
+    if (!createGraphicsPipelines()) return false;
 
     if (!createTextureImage()) return false;
     if (!createTextureImageView()) return false;
@@ -1588,32 +1665,9 @@ bool recreateSwapChain() {
     if (!createSwapChain()) return false;
     if (!createImageViews()) return false;
     if (!createRenderPass()) return false;
-    if (!createGraphicsPipeline()) return false;
+    if (!createGraphicsPipelines()) return false;
     if (!createColorResources()) return false;
     if (!createFrameBuffers()) return false;
-
-//    if (changeTexture) {
-//        vkDestroySampler(logicalDevice, textureSampler, NULL);
-//        vkDestroyImageView(logicalDevice, textureImageView, NULL);
-//
-//        vkDestroyImage(logicalDevice, textureImage, NULL);
-//        vkFreeMemory(logicalDevice, textureImageMemory, NULL);
-//
-//        if (!createTextureImage()) return false;
-//        if (!createTextureImageView()) return false;
-//        if (!createTextureSampler()) return false;
-//    }
-//
-//    if (changeVertexIndex) {
-//        vkDestroyBuffer(logicalDevice, indexBuffer, NULL);
-//        vkFreeMemory(logicalDevice, indexBufferMemory, NULL);
-//
-//        vkDestroyBuffer(logicalDevice, vertexBuffer, NULL);
-//        vkFreeMemory(logicalDevice, vertexBufferMemory, NULL);
-//
-//        if (!createVertexBuffer()) return false;
-//        if (!createIndexBuffer()) return false;
-//    }
 
     if (!createDescriptorPool()) return false;
     if (!createDescriptorSets()) return false;
@@ -1635,7 +1689,7 @@ bool vulkanInit(GLFWwindow *pwindow, Texture *ptexture) {
     if (!createImageViews()) return false;
     if (!createRenderPass()) return false;
     if (!createDescriptorSetLayout()) return false;
-    if (!createGraphicsPipeline()) return false;
+    if (!createGraphicsPipelines()) return false;
     if (!createCommandPool()) return false;
     if (!createColorResources()) return false;
     if (!createFrameBuffers()) return false;
@@ -1644,8 +1698,8 @@ bool vulkanInit(GLFWwindow *pwindow, Texture *ptexture) {
     if (!createTextureImageView()) return false;
     if (!createTextureSampler()) return false;
 
-    if (!createVertexBuffer()) return false;
-    if (!createIndexBuffer()) return false;
+    if (!createVertexBuffers()) return false;
+    if (!createIndexBuffers()) return false;
 
     if (!createDescriptorPool()) return false;
     if (!createDescriptorSets()) return false;
@@ -1666,11 +1720,15 @@ void vulkanTerminate() {
 
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, NULL);
 
-    vkDestroyBuffer(logicalDevice, indexBuffer, NULL);
-    vkFreeMemory(logicalDevice, indexBufferMemory, NULL);
+    uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
 
-    vkDestroyBuffer(logicalDevice, vertexBuffer, NULL);
-    vkFreeMemory(logicalDevice, vertexBufferMemory, NULL);
+    for (uint32_t i = 0; i < nrof_objects; ++i) {
+        vkDestroyBuffer(logicalDevice, indexBuffer[i], NULL);
+        vkFreeMemory(logicalDevice, indexBufferMemory[i], NULL);
+
+        vkDestroyBuffer(logicalDevice, vertexBuffer[i], NULL);
+        vkFreeMemory(logicalDevice, vertexBufferMemory[i], NULL);
+    }
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], NULL);
