@@ -91,8 +91,12 @@ Texture *texture;
 
 VkBuffer *vertexBuffer;
 VkDeviceMemory *vertexBufferMemory;
+
 VkBuffer *indexBuffer;
 VkDeviceMemory *indexBufferMemory;
+
+VkBuffer *uniformBuffers;
+VkDeviceMemory *uniformBuffersMemory;
 
 VkDescriptorPool descriptorPool;
 VkDescriptorSet *descriptorSets;
@@ -105,6 +109,12 @@ VkFence *inFlightFences;
 size_t currentFrame = 0;
 
 bool framebufferResized = false;
+
+typedef struct UniformBufferObject {
+    mat4f model;
+    mat4f view;
+    mat4f proj;
+} UniformBufferObject;
 
 typedef struct Vertex {
     vec2f pos;
@@ -1147,6 +1157,11 @@ void terminateSwapChain() {
 
     vkDestroySwapchainKHR(logicalDevice, swapChain, NULL);
 
+    for (size_t i = 0; i < nrof_swapChainImages; i++) {
+        vkDestroyBuffer(logicalDevice, uniformBuffers[i], NULL);
+        vkFreeMemory(logicalDevice, uniformBuffersMemory[i], NULL);
+    }
+
     vkDestroyDescriptorPool(logicalDevice, descriptorPool, NULL);
 }
 
@@ -1308,6 +1323,23 @@ bool createIndexBuffers() {
 
     for (uint32_t i = 0; i < nrof_objects; ++i) {
         if (!createIndexBuffer(i, objects[i].indices, objects[i].nrof_indices * sizeof(Index))) return false;
+    }
+
+    return true;
+}
+
+bool createUniformBuffers() {
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    uniformBuffers = (VkBuffer *) malloc(sizeof(VkBuffer) * nrof_swapChainImages);
+    uniformBuffersMemory = (VkDeviceMemory *) malloc(sizeof(VkDeviceMemory) * nrof_swapChainImages);
+
+    for (size_t i = 0; i < nrof_swapChainImages; i++) {
+        createBuffer(
+                bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &uniformBuffers[i],
+                &uniformBuffersMemory[i]
+        );
     }
 
     return true;
@@ -1517,41 +1549,64 @@ bool createDescriptorSets() {
     allocInfo.pSetLayouts = layouts;
 
     descriptorSets = (VkDescriptorSet *) malloc(sizeof(VkDescriptorSet) * nrof_swapChainImages);
+
     if (vkAllocateDescriptorSets(logicalDevice, &allocInfo, descriptorSets) != VK_SUCCESS) {
         fprintf(stderr, "vulkan: failed to allocate descriptor sets\n");
         return false;
     }
 
     for (size_t i = 0; i < nrof_swapChainImages; i++) {
+        VkDescriptorBufferInfo bufferInfo = {};
+        bufferInfo.buffer = uniformBuffers[i];
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBufferObject);
+
         VkDescriptorImageInfo imageInfo = {};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfo.imageView = textureImageView;
         imageInfo.sampler = textureSampler;
 
-        VkWriteDescriptorSet descriptorWrite = {};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = descriptorSets[i];
-        descriptorWrite.dstBinding = 0;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &imageInfo;
+        uint32_t nrof_descriptorwrites = 2;
+        VkWriteDescriptorSet *descriptorWrites = (VkWriteDescriptorSet *) malloc(
+                sizeof(VkWriteDescriptorSet) * nrof_descriptorwrites);
 
-        vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, NULL);
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].pNext = NULL;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].pNext = NULL;
+        descriptorWrites[1].dstSet = descriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(logicalDevice, nrof_descriptorwrites, descriptorWrites, 0, NULL);
     }
 
     return true;
 }
 
 bool createDescriptorPool() {
-    VkDescriptorPoolSize poolSize = {};
-    poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSize.descriptorCount = nrof_swapChainImages;
+    uint32_t nrof_poolsizes = 2;
+
+    VkDescriptorPoolSize *poolSizes = (VkDescriptorPoolSize *) malloc(sizeof(VkDescriptorPoolSize) * nrof_poolsizes);
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = nrof_swapChainImages;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = nrof_swapChainImages;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.poolSizeCount = nrof_poolsizes;
+    poolInfo.pPoolSizes = poolSizes;
     poolInfo.maxSets = nrof_swapChainImages;
 
     if (vkCreateDescriptorPool(logicalDevice, &poolInfo, NULL, &descriptorPool) != VK_SUCCESS) {
@@ -1566,17 +1621,31 @@ bool createDescriptorSetLayout() {
     /*
      * Descriptor set layout
      */
+    VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.pImmutableSamplers = NULL;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
     VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
-    samplerLayoutBinding.binding = 0;
+    samplerLayoutBinding.binding = 1;
     samplerLayoutBinding.descriptorCount = 1;
     samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     samplerLayoutBinding.pImmutableSamplers = NULL;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    uint32_t nrof_bindings = 2;
+    VkDescriptorSetLayoutBinding *bindings = (VkDescriptorSetLayoutBinding *) malloc(
+            sizeof(VkDescriptorSetLayoutBinding) * nrof_bindings);
+
+    bindings[0] = uboLayoutBinding;
+    bindings[1] = samplerLayoutBinding;
+
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &samplerLayoutBinding;
+    layoutInfo.bindingCount = nrof_bindings;
+    layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, NULL, &descriptorSetLayout) != VK_SUCCESS) {
         fprintf(stderr, "vulkan: failed to create descriptor set layout\n");
@@ -1667,6 +1736,7 @@ bool recreateSwapChain() {
     if (!createGraphicsPipelines()) return false;
     if (!createColorResources()) return false;
     if (!createFrameBuffers()) return false;
+    if (!createUniformBuffers()) return false;
 
     if (!createDescriptorPool()) return false;
     if (!createDescriptorSets()) return false;
@@ -1699,6 +1769,7 @@ bool vulkanInit(GLFWwindow *pwindow, Texture *ptexture) {
 
     if (!createVertexBuffers()) return false;
     if (!createIndexBuffers()) return false;
+    if (!createUniformBuffers()) return false;
 
     if (!createDescriptorPool()) return false;
     if (!createDescriptorSets()) return false;
@@ -1747,6 +1818,28 @@ void vulkanTerminate() {
     vkDestroyInstance(instance, NULL);
 }
 
+void updateUniformBuffer(uint32_t currentImage) {
+    UniformBufferObject ubo = {};
+
+    const mat4f SCALE = {
+            {{
+                     {0.5f, 0.0f, 0.0f, 0.0f},
+                     {0.0f, 0.5f, 0.0f, 0.0f},
+                     {0.0f, 0.0f, 1.0f, 0.0f},
+                     {0.0f, 0.0f, 0.0f, 1.0f},
+             }}
+    };
+
+    ubo.model = SCALE;
+    ubo.view = MAT4F_IDENTITY;
+    ubo.proj = MAT4F_IDENTITY;
+
+    void *data;
+    vkMapMemory(logicalDevice, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+    memcpy(data, &ubo, sizeof(ubo));
+    vkUnmapMemory(logicalDevice, uniformBuffersMemory[currentImage]);
+}
+
 bool drawFrame() {
     vkWaitForFences(logicalDevice, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -1760,6 +1853,8 @@ bool drawFrame() {
         fprintf(stderr, "vulkan: failed to acquire swap chain image\n");
         return false;
     }
+
+    updateUniformBuffer(imageIndex);
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
