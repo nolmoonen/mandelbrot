@@ -70,7 +70,7 @@ VkImageView *swapChainImageViews;
 VkRenderPass renderPass;
 VkDescriptorSetLayout descriptorSetLayout;
 
-VkPipelineLayout *pipelineLayout;
+VkPipelineLayout pipelineLayout;
 VkPipeline *graphicsPipeline;
 
 VkFramebuffer *swapChainFramebuffers;
@@ -884,19 +884,6 @@ bool createGraphicsPipeline(uint32_t index, const char *vertShaderFileName, cons
     colorBlending.blendConstants[2] = 0.0f;
     colorBlending.blendConstants[3] = 0.0f;
 
-    /*
-     * Pipe layout
-     */
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
-
-    if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout[index]) != VK_SUCCESS) {
-        fprintf(stderr, "vulkan: failed to create pipeline layout\n");
-        return false;
-    }
-
     VkGraphicsPipelineCreateInfo pipelineInfo = {};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineInfo.stageCount = 2;
@@ -907,7 +894,7 @@ bool createGraphicsPipeline(uint32_t index, const char *vertShaderFileName, cons
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.layout = pipelineLayout[index];
+    pipelineInfo.layout = pipelineLayout;
     pipelineInfo.renderPass = renderPass;
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -928,7 +915,6 @@ bool createGraphicsPipelines() {
     uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
 
     graphicsPipeline = (VkPipeline *) malloc(sizeof(VkPipeline) * nrof_objects);
-    pipelineLayout = (VkPipelineLayout *) malloc(sizeof(VkPipelineLayout) * nrof_objects);
 
     for (uint32_t i = 0; i < nrof_objects; ++i) {
         if (!createGraphicsPipeline(i, objects[i].vert_shader, objects[i].frag_shader)) return false;
@@ -1080,6 +1066,11 @@ bool createCommandBuffers() {
 
         vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         {
+            vkCmdBindDescriptorSets(
+                    commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0,
+                    NULL
+            );
+
             uint32_t nrof_objects = sizeof(objects) / sizeof(Object);
             for (uint32_t j = 0; j < nrof_objects; ++j) {
                 vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline[j]);
@@ -1088,9 +1079,6 @@ bool createCommandBuffers() {
                 vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, &vertexBuffer[j], offsets);
 
                 vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer[j], 0, VK_INDEX_TYPE_UINT16);
-
-                vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout[j], 0, 1,
-                                        &descriptorSets[i], 0, NULL);
 
                 vkCmdDrawIndexed(commandBuffers[i], objects[j].nrof_indices, 1, 0, 0, 0);
             }
@@ -1146,8 +1134,9 @@ void terminateSwapChain() {
 
     for (uint32_t i = 0; i < nrof_objects; ++i) {
         vkDestroyPipeline(logicalDevice, graphicsPipeline[i], NULL);
-        vkDestroyPipelineLayout(logicalDevice, pipelineLayout[i], NULL);
     }
+
+    vkDestroyPipelineLayout(logicalDevice, pipelineLayout, NULL);
 
     vkDestroyRenderPass(logicalDevice, renderPass, NULL);
 
@@ -1391,14 +1380,7 @@ bool transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayo
         return false;
     }
 
-    vkCmdPipelineBarrier(
-            commandBuffer,
-            sourceStage, destinationStage,
-            0,
-            0, NULL,
-            0, NULL,
-            1, &barrier
-    );
+    vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
 
     endSingleTimeCommands(commandBuffer);
 
@@ -1581,6 +1563,9 @@ bool createDescriptorPool() {
 }
 
 bool createDescriptorSetLayout() {
+    /*
+     * Descriptor set layout
+     */
     VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
     samplerLayoutBinding.binding = 0;
     samplerLayoutBinding.descriptorCount = 1;
@@ -1595,6 +1580,19 @@ bool createDescriptorSetLayout() {
 
     if (vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, NULL, &descriptorSetLayout) != VK_SUCCESS) {
         fprintf(stderr, "vulkan: failed to create descriptor set layout\n");
+        return false;
+    }
+
+    /*
+     * Pipe layout
+     */
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+
+    if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS) {
+        fprintf(stderr, "vulkan: failed to create pipeline layout\n");
         return false;
     }
 
@@ -1632,8 +1630,9 @@ bool recreateTexture() {
 
     for (uint32_t i = 0; i < nrof_objects; ++i) {
         vkDestroyPipeline(logicalDevice, graphicsPipeline[i], NULL);
-        vkDestroyPipelineLayout(logicalDevice, pipelineLayout[i], NULL);
     }
+
+    vkDestroyPipelineLayout(logicalDevice, pipelineLayout, NULL);
 
     vkDestroyDescriptorPool(logicalDevice, descriptorPool, NULL);
 
