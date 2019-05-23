@@ -5,10 +5,16 @@ set(CMAKE_C_STANDARD 99)
 
 add_executable(mandelbrot main.c vulkan.h stb_image.h)
 
-# add glfw library
+# try to find Vulkan
+find_package(Vulkan)
+IF (${Vulkan_FOUND})
+    MESSAGE(STATUS "Found Vulkan at ${Vulkan_INCLUDE_DIR} with ${Vulkan_LIBRARY}")
+ENDIF (${Vulkan_FOUND})
+
+# add GLFW library, link Vulkan
 add_subdirectory(${PROJECT_SOURCE_DIR}/glfw)
-target_link_libraries(${PROJECT_NAME} glfw ${VULKAN_LIBRARY})
-target_include_directories(${PROJECT_NAME} PRIVATE glfw/include ${VULKAN_INCLUDE_DIR})
+target_link_libraries(${PROJECT_NAME} glfw ${Vulkan_LIBRARY})
+target_include_directories(${PROJECT_NAME} PRIVATE glfw/include ${Vulkan_INCLUDE_DIR})
 
 # disable building documentation, tests, and examples if build type is release
 if (CMAKE_BUILD_TYPE EQUAL "RELEASE")
