@@ -116,6 +116,8 @@ typedef struct UniformBufferObject {
     mat4f proj;
 } UniformBufferObject;
 
+UniformBufferObject (*uniformBufferObject)();
+
 typedef struct Vertex {
     vec2f pos;
     vec3f color;
@@ -137,10 +139,10 @@ Index textured_quad_indices[] = {
 };
 
 Vertex colored_quad_vertices[] = {
-        {{-0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}}, // top right
-        {{0.5f,  -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}}, // top left
-        {{0.5f,  0.5f},  {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // bottom right
-        {{-0.5f, 0.5f},  {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom left
+        {{-1.0f, -1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}}, // top right
+        {{1.0f,  -1.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}}, // top left
+        {{1.0f,  1.0f},  {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // bottom right
+        {{-1.0f, 1.0f},  {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom left
 };
 
 Index colored_quad_indices[] = {
@@ -1745,9 +1747,11 @@ bool recreateSwapChain() {
     return true;
 }
 
-bool vulkanInit(GLFWwindow *pwindow, Texture *ptexture) {
+bool vulkanInit(GLFWwindow *pwindow, Texture *ptexture, UniformBufferObject (*puniformBufferObject)()) {
     window = pwindow;
     texture = ptexture;
+    texture = ptexture;
+    uniformBufferObject = puniformBufferObject;
 
     if (!createInstance()) return false;
     if (!setupDebugMessenger()) return false;
@@ -1819,20 +1823,7 @@ void vulkanTerminate() {
 }
 
 void updateUniformBuffer(uint32_t currentImage) {
-    UniformBufferObject ubo = {};
-
-    const mat4f SCALE = {
-            {{
-                     {0.5f, 0.0f, 0.0f, 0.0f},
-                     {0.0f, 0.5f, 0.0f, 0.0f},
-                     {0.0f, 0.0f, 1.0f, 0.0f},
-                     {0.0f, 0.0f, 0.0f, 1.0f},
-             }}
-    };
-
-    ubo.model = SCALE;
-    ubo.view = MAT4F_IDENTITY;
-    ubo.proj = MAT4F_IDENTITY;
+    UniformBufferObject ubo = (*uniformBufferObject)();
 
     void *data;
     vkMapMemory(logicalDevice, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);

@@ -8,6 +8,7 @@
 #include <math.h>
 #include <time.h>
 
+#include "math.h"
 #include "vulkan.h"
 #include "bmp.h"
 #include "complex.h"
@@ -111,11 +112,47 @@ void generate(Texture *texture) {
     }
 }
 
-void generateTexture(Texture *texture, uint32_t width, uint32_t height) {
-    texture->width = width;
-    texture->height = height;
-    texture->data = (uint8_t *) malloc(sizeof(uint8_t) * texture->width * texture->height * 4);
-    generate(texture);
+void generateTexture(Texture *ptexture, uint32_t pwidth, uint32_t pheight) {
+    ptexture->width = pwidth;
+    ptexture->height = pheight;
+    ptexture->data = (uint8_t *) malloc(sizeof(uint8_t) * ptexture->width * ptexture->height * 4);
+    generate(ptexture);
+}
+
+UniformBufferObject calculateUniformBufferObject() {
+    mat4f proj = MAT4F_IDENTITY;
+
+    if (selecting) {
+        int32_t selected_width = xpos - clicked_xpos;
+        int32_t selected_height = ypos - clicked_ypos;
+
+        /*
+         * translate
+         */
+        proj = mul(proj, translate((vec3f) {
+                -1.0f + ((clicked_xpos * 2.0f + selected_width) / (float) width),
+                -1.0f + ((clicked_ypos * 2.0f + selected_height) / (float) height),
+                0.0f,
+        }));
+
+        /*
+         * scaling
+         */
+        proj = mul(proj, scale((vec3f) {
+                selected_width / (float) width,
+                selected_height / (float) height,
+                1.0f,
+        }));
+    } else {
+        // hide selected quad behind textured quad
+        proj = mul(proj, translate((vec3f) {
+                0.0f,
+                0.0f,
+                -1.0f,
+        }));
+    }
+
+    return (UniformBufferObject) {MAT4F_IDENTITY, MAT4F_IDENTITY, proj};
 }
 
 Texture *texture;
@@ -148,7 +185,7 @@ int main() {
     generateTexture(texture, WIDTH, HEIGHT);
 
     // initialize vulkan
-    if (!vulkanInit(window, texture)) {
+    if (!vulkanInit(window, texture, &calculateUniformBufferObject)) {
         glfwTerminate();
         return 1;
     }
@@ -201,49 +238,19 @@ static void error_callback(int error, const char *description) {
 static void cursor_position_callback(GLFWwindow *pwindow, double pxpos, double pypos) {
     xpos = pxpos;
     ypos = pypos;
-
-    if (selecting) {
-        double xpos_screen = (xpos / width) * 2.0f - 1.0f;
-        double ypos_screen = (ypos / height) * 2.0f - 1.0f;
-
-//        colored_quad_vertices[0].pos.x = xpos_screen;
-//        colored_quad_vertices[0].pos.y = ypos_screen;
-
-        colored_quad_vertices[1].pos.x = xpos_screen;
-//        colored_quad_vertices[1].pos.y = ypos_screen;
-
-        colored_quad_vertices[2].pos.x = xpos_screen;
-        colored_quad_vertices[2].pos.y = ypos_screen;
-
-//        colored_quad_vertices[3].pos.x = xpos_screen;
-        colored_quad_vertices[3].pos.y = ypos_screen;
-
-        recreateVertices();
-    }
 }
 
 static void mouse_button_callback(GLFWwindow *pwindow, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        double xpos_screen = (xpos / width) * 2.0f - 1.0f;
-        double ypos_screen = (ypos / height) * 2.0f - 1.0f;
-
-        colored_quad_vertices[0].pos.x = xpos_screen;
-        colored_quad_vertices[0].pos.y = ypos_screen;
-
-        colored_quad_vertices[1].pos.x = xpos_screen;
-        colored_quad_vertices[1].pos.y = ypos_screen;
-
-        colored_quad_vertices[2].pos.x = xpos_screen;
-        colored_quad_vertices[2].pos.y = ypos_screen;
-
-        colored_quad_vertices[3].pos.x = xpos_screen;
-        colored_quad_vertices[3].pos.y = ypos_screen;
+        clicked_xpos = xpos;
+        clicked_ypos = ypos;
 
         selecting = true;
-
-        recreateVertices();
     }
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        release_xpos = xpos;
+        release_ypos = ypos;
+
         selecting = false;
     }
 }
