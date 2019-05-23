@@ -224,6 +224,7 @@ int main() {
 static void key_callback(GLFWwindow *pwindow, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(pwindow, GLFW_TRUE);
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
+        fprintf(stdout, "recreating texture..\n");
         texture = (Texture *) malloc(sizeof(Texture));
         generateTexture(texture, width, height);
 

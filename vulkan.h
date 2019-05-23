@@ -1654,9 +1654,10 @@ bool createDescriptorSetLayout() {
         return false;
     }
 
-    /*
-     * Pipe layout
-     */
+    return true;
+}
+
+bool createPipelineLayout() {
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
@@ -1710,6 +1711,7 @@ bool recreateTexture() {
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, NULL);
 
     if (!createDescriptorSetLayout()) return false;
+    if (!createPipelineLayout()) return false;
     if (!createGraphicsPipelines()) return false;
 
     if (!createTextureImage()) return false;
@@ -1735,9 +1737,11 @@ bool recreateSwapChain() {
     if (!createSwapChain()) return false;
     if (!createImageViews()) return false;
     if (!createRenderPass()) return false;
+    if (!createPipelineLayout()) return false;
     if (!createGraphicsPipelines()) return false;
     if (!createColorResources()) return false;
     if (!createFrameBuffers()) return false;
+
     if (!createUniformBuffers()) return false;
 
     if (!createDescriptorPool()) return false;
@@ -1762,6 +1766,7 @@ bool vulkanInit(GLFWwindow *pwindow, Texture *ptexture, UniformBufferObject (*pu
     if (!createImageViews()) return false;
     if (!createRenderPass()) return false;
     if (!createDescriptorSetLayout()) return false;
+    if (!createPipelineLayout()) return false;
     if (!createGraphicsPipelines()) return false;
     if (!createCommandPool()) return false;
     if (!createColorResources()) return false;
@@ -1839,7 +1844,7 @@ bool drawFrame() {
                                             imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        return recreateSwapChain(true, true);
+        return recreateSwapChain();
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         fprintf(stderr, "vulkan: failed to acquire swap chain image\n");
         return false;
