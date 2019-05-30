@@ -14,7 +14,7 @@
 #include "color.h"
 
 // limit to the number of iterations in the mandelbrot function
-const uint32_t MAX_ITER = 120;
+#define MAX_ITER 80
 
 // defines a fractal through coordinates
 typedef struct Fractal {
@@ -34,7 +34,7 @@ const Fractal FRACTAL_START = {
 
 Texture *texture; // current texture
 
-const uint32_t MAX_LEVELS = 50; // maximum amount of times that can be zoomed
+const uint32_t MAX_LEVELS = 20; // maximum amount of times that can be zoomed
 Fractal *fractal_stack; // stack of fractals to go back once zoomed
 uint32_t current_level; // current position on stack
 
@@ -56,41 +56,27 @@ static void cursor_position_callback(GLFWwindow *p_window, double pxpos, double 
 
 static void mouse_button_callback(GLFWwindow *p_window, int button, int action, int mods);
 
+double linear_interpolation(double color1, double color2, double t) {
+    return color1 * (1 - t) + color2 * t;
+}
+
 /**
  * Calculates a HSV color based on iterations.
  */
-struct RGB color(uint32_t n, uint32_t N) {
+struct RGB color(double m, double *hues) {
     struct HSV hsv = {0};
-    hsv.h = 255 * n / N;
+    hsv.h = 255 -
+            (uint32_t) (255 * linear_interpolation(hues[(uint32_t) floor(m)], hues[(uint32_t) ceil(m)], fmod(m, 1)));
     hsv.s = 255;
-    hsv.v = n < N ? 255 : 0;
+    hsv.v = m < MAX_ITER ? 255 : 0;
     struct RGB rgb = HSVtoRGB(hsv);
     return rgb;
 }
 
 /**
- * Calculates a RGB color based on iterations and a specified base color.
- */
-struct RGB basecolor(uint32_t n, uint32_t N) {
-    const struct RGB BASE = {255, 255, 255};
-    const uint32_t THRESHOLD = 2;
-
-    if (n > N / THRESHOLD) {
-        // middle, always black
-        struct RGB rgb = {0, 0, 0};
-        return rgb;
-    } else {
-        // (2 * n < N)
-        // edges, change from black to blue
-        struct RGB rgb = {(n * BASE.r / N) * THRESHOLD, (n * BASE.g / N) * THRESHOLD, (n * BASE.b / N) * THRESHOLD};
-        return rgb;
-    }
-}
-
-/**
  * Calculates iterations to converge, given a complex number.
  */
-uint32_t mandelbrot(struct Complex c) {
+double mandelbrot(struct Complex c) {
     struct Complex z = {0, 0};
     uint32_t n = 0;
 
@@ -99,10 +85,21 @@ uint32_t mandelbrot(struct Complex c) {
         ++n;
     }
 
-    return n;
+    if (n == MAX_ITER) {
+        return MAX_ITER;
+    }
+
+    return n + 1 - log(log2(abs_complex(z)));
 }
 
 void generate(Texture *p_texture) {
+    double *all_iterations = (double *) malloc(sizeof(double) * p_texture->width * p_texture->height);
+    uint32_t histogram[MAX_ITER - 1] = {0};
+    uint32_t total = 0;
+
+    /*
+     * calculate iterations
+     */
     for (uint32_t x = 0; x < p_texture->width; ++x) {
         for (uint32_t y = 0; y < p_texture->height; ++y) {
             double re_diff =
@@ -117,11 +114,32 @@ void generate(Texture *p_texture) {
             };
 
             // compute number of iterations
-            uint32_t m = mandelbrot(c);
+            double m = mandelbrot(c);
+            all_iterations[y * p_texture->width + x] = m;
 
+            if (m < MAX_ITER) {
+                histogram[(uint32_t) floor(m)]++;
+                total++;
+            }
+        }
+    }
+
+    double *hues = (double *) malloc(sizeof(double) * (MAX_ITER + 1));
+    double h = 0;
+    for (uint32_t i = 0; i < MAX_ITER; ++i) {
+        h += histogram[i] / (double) total;
+        hues[i] = h;
+    }
+    hues[MAX_ITER] = h;
+
+    /*
+     * calculate and set colors
+     */
+    for (uint32_t x = 0; x < p_texture->width; ++x) {
+        for (uint32_t y = 0; y < p_texture->height; ++y) {
             // create color, based on the number of iterations
-            struct RGB rgb = color(m, MAX_ITER);
-            
+            struct RGB rgb = color(all_iterations[y * p_texture->width + x], hues);
+
             // fill data
             uint32_t pixel = (y * p_texture->width + x) * 4;
             p_texture->data[pixel + 0] = rgb.r;
@@ -130,6 +148,9 @@ void generate(Texture *p_texture) {
             p_texture->data[pixel + 3] = 255; // a
         }
     }
+
+    free(hues);
+    free(all_iterations);
 }
 
 void generate_texture(Texture *p_texture, uint32_t p_width, uint32_t p_height) {
@@ -285,6 +306,14 @@ static void cursor_position_callback(GLFWwindow *p_window, double pxpos, double 
 }
 
 static void mouse_button_callback(GLFWwindow *p_window, int button, int action, int mods) {
+    // cancel selection
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+        if (selecting) {
+            selecting = !selecting;
+        }
+    }
+
+    // start selecting
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         clicked_xpos = xpos;
         clicked_ypos = ypos;
@@ -292,25 +321,28 @@ static void mouse_button_callback(GLFWwindow *p_window, int button, int action, 
         selecting = true;
     }
 
+    // confirm selection
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
         if (current_level == MAX_LEVELS - 1) {
             fprintf(stdout, "maximum depth reached!\n");
         } else {
-            double re_diff = fractal_stack[current_level].re_end - fractal_stack[current_level].re_start;
-            double im_diff = fractal_stack[current_level].im_end - fractal_stack[current_level].im_start;
+            if (selecting) { // to allow for canceling selection
+                double re_diff = fractal_stack[current_level].re_end - fractal_stack[current_level].re_start;
+                double im_diff = fractal_stack[current_level].im_end - fractal_stack[current_level].im_start;
 
-            // new fractal definition
-            Fractal new_pos = {
-                    fractal_stack[current_level].re_start + (clicked_xpos / screen_width) * re_diff,
-                    fractal_stack[current_level].re_end - ((screen_width - xpos) / screen_width) * re_diff,
-                    fractal_stack[current_level].im_start + (clicked_ypos / screen_height) * im_diff,
-                    fractal_stack[current_level].im_end - ((screen_height - ypos) / screen_height) * im_diff,
-            };
+                // new fractal definition
+                Fractal new_pos = {
+                        fractal_stack[current_level].re_start + (clicked_xpos / screen_width) * re_diff,
+                        fractal_stack[current_level].re_end - ((screen_width - xpos) / screen_width) * re_diff,
+                        fractal_stack[current_level].im_start + (clicked_ypos / screen_height) * im_diff,
+                        fractal_stack[current_level].im_end - ((screen_height - ypos) / screen_height) * im_diff,
+                };
 
-            // add to next position on stack
-            fractal_stack[++current_level] = new_pos;
+                // add to next position on stack
+                fractal_stack[++current_level] = new_pos;
 
-            recreate_and_submit_texture();
+                recreate_and_submit_texture();
+            }
         }
 
         selecting = false;
