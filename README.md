@@ -6,3 +6,8 @@ For Vulkan, [this](https://vulkan-tutorial.com/) tutorial was used.
 * Clone [GLFW](https://github.com/glfw/glfw) in directory `glfw`.
 * Install [Vulkan SDK](https://www.lunarg.com/vulkan-sdk/).
 * Build using CMake.
+
+## Todo
+* Histogram based coloring to improve zoomed fractals.
+* Save texture when zooming (invalidate stack when resizing).
+* Deal with recreating texture while still resizing.

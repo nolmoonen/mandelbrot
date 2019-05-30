@@ -5,25 +5,25 @@
 #ifndef MANDELBROT_MATH_H
 #define MANDELBROT_MATH_H
 
-typedef struct vec2f {
+typedef struct Vec2f {
     float x;
     float y;
-} vec2f;
+} Vec2f;
 
-typedef struct vec3f {
+typedef struct Vec3f {
     float x;
     float y;
     float z;
-} vec3f;
+} Vec3f;
 
-typedef struct vec4f {
+typedef struct Vec4f {
     float x;
     float y;
     float z;
     float w;
-} vec4f;
+} Vec4f;
 
-typedef struct mat4f {
+typedef struct Mat4f {
     union {
         float val[4][4];
 
@@ -49,9 +49,9 @@ typedef struct mat4f {
             float m33;
         };
     };
-} mat4f;
+} Mat4f;
 
-const mat4f MAT4F_IDENTITY = {
+const Mat4f MAT4F_IDENTITY = {
         {{
                  {1, 0, 0, 0},
                  {0, 1, 0, 0},
@@ -60,8 +60,8 @@ const mat4f MAT4F_IDENTITY = {
          }}
 };
 
-mat4f scale(vec3f s) {
-    return (mat4f) {{{
+Mat4f scale(Vec3f s) {
+    return (Mat4f) {{{
                              {s.x, 0, 0, 0},
                              {0, s.y, 0, 0},
                              {0, 0, s.z, 0},
@@ -69,8 +69,8 @@ mat4f scale(vec3f s) {
                      }}};
 }
 
-mat4f translate(vec3f t) {
-    return (mat4f) {{{
+Mat4f translate(Vec3f t) {
+    return (Mat4f) {{{
                              {1, 0, 0, 0},
                              {0, 1, 0, 0},
                              {0, 0, 1, 0},
@@ -78,13 +78,13 @@ mat4f translate(vec3f t) {
                      }}};
 }
 
-mat4f mul(mat4f A, mat4f B) {
-    mat4f result = {};
+Mat4f cross(Mat4f a, Mat4f b) {
+    Mat4f result = {};
 
     for (uint8_t column = 0; column < 4; column++) {
         for (uint8_t row = 0; row < 4; row++) {
             for (uint8_t i = 0; i < 4; i++) {
-                result.val[column][row] += A.val[i][row] * B.val[column][i];
+                result.val[column][row] += a.val[i][row] * b.val[column][i];
             }
         }
     }

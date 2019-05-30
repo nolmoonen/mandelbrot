@@ -86,7 +86,7 @@ VkDeviceMemory textureImageMemory;
 VkImageView textureImageView;
 VkSampler textureSampler;
 
-GLFWwindow *window;
+GLFWwindow *glfwWindow;
 Texture *texture;
 
 VkBuffer *vertexBuffer;
@@ -111,17 +111,17 @@ size_t currentFrame = 0;
 bool framebufferResized = false;
 
 typedef struct UniformBufferObject {
-    mat4f model;
-    mat4f view;
-    mat4f proj;
+    Mat4f model;
+    Mat4f view;
+    Mat4f proj;
 } UniformBufferObject;
 
 UniformBufferObject (*uniformBufferObject)();
 
 typedef struct Vertex {
-    vec2f pos;
-    vec3f color;
-    vec2f texCoord;
+    Vec2f pos;
+    Vec3f color;
+    Vec2f texCoord;
 } Vertex;
 
 typedef uint16_t Index;
@@ -489,7 +489,7 @@ VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR capabilities) {
         return capabilities.currentExtent;
     } else {
         int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
+        glfwGetFramebufferSize(glfwWindow, &width, &height);
 
         VkExtent2D actualExtent = {(uint32_t) width, (uint32_t) height};
 
@@ -663,7 +663,7 @@ bool createLogicalDevice() {
 }
 
 bool createSurface() {
-    if (glfwCreateWindowSurface(instance, window, NULL, &surface) != VK_SUCCESS) {
+    if (glfwCreateWindowSurface(instance, glfwWindow, NULL, &surface) != VK_SUCCESS) {
         fprintf(stderr, "vulkan: failed to create window surface\n");
         return false;
     }
@@ -1726,7 +1726,7 @@ bool recreateTexture() {
 bool recreateSwapChain() {
     int width = 0, height = 0;
     while (width == 0 || height == 0) {
-        glfwGetFramebufferSize(window, &width, &height);
+        glfwGetFramebufferSize(glfwWindow, &width, &height);
         glfwWaitEvents();
     }
 
@@ -1751,9 +1751,15 @@ bool recreateSwapChain() {
     return true;
 }
 
+/**
+ * Initializes Vulkan.
+ * @param pwindow pointer to window handle.
+ * @param ptexture pointer to texture.
+ * @param puniformBufferObject pointer to function creating uniform buffer.
+ * @return
+ */
 bool vulkanInit(GLFWwindow *pwindow, Texture *ptexture, UniformBufferObject (*puniformBufferObject)()) {
-    window = pwindow;
-    texture = ptexture;
+    glfwWindow = pwindow;
     texture = ptexture;
     uniformBufferObject = puniformBufferObject;
 
