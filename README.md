@@ -13,4 +13,3 @@ For Vulkan, [this](https://vulkan-tutorial.com/) tutorial was used.
 * Save texture when zooming (invalidate stack when resizing).
 * Deal with recreating texture while still resizing.
 * Increasing maximum iterations over time.
-* Enforcing selection aspect ratio.

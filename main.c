@@ -165,14 +165,15 @@ UniformBufferObject calculate_uniform_buffer_object() {
 
     if (selecting) {
         int32_t selected_width = xpos - clicked_xpos;
-        int32_t selected_height = ypos - clicked_ypos;
+        // height is scaled from horizontal positions
+        double scaled_selected_height = (selected_width / (double) screen_width) * screen_height;
 
         /*
          * translate
          */
         proj = cross(proj, translate((Vec3f) {
                 -1.0f + ((clicked_xpos * 2.0f + selected_width) / (float) screen_width),
-                -1.0f + ((clicked_ypos * 2.0f + selected_height) / (float) screen_height),
+                -1.0f + ((clicked_ypos * 2.0f + scaled_selected_height) / (float) screen_height),
                 0.0f,
         }));
 
@@ -181,7 +182,7 @@ UniformBufferObject calculate_uniform_buffer_object() {
          */
         proj = cross(proj, scale((Vec3f) {
                 selected_width / (float) screen_width,
-                selected_height / (float) screen_height,
+                scaled_selected_height / (float) screen_height,
                 1.0f,
         }));
     } else {
@@ -327,6 +328,9 @@ static void mouse_button_callback(GLFWwindow *p_window, int button, int action, 
             fprintf(stdout, "maximum depth reached!\n");
         } else {
             if (selecting) { // to allow for canceling selection
+                // obtain new ypos based on aspect ratio rather than real ypos
+                double ypos_scaled = clicked_ypos + ((xpos - clicked_xpos) / (double) screen_width) * screen_height;
+
                 double re_diff = fractal_stack[current_level].re_end - fractal_stack[current_level].re_start;
                 double im_diff = fractal_stack[current_level].im_end - fractal_stack[current_level].im_start;
 
@@ -335,7 +339,7 @@ static void mouse_button_callback(GLFWwindow *p_window, int button, int action, 
                         fractal_stack[current_level].re_start + (clicked_xpos / screen_width) * re_diff,
                         fractal_stack[current_level].re_end - ((screen_width - xpos) / screen_width) * re_diff,
                         fractal_stack[current_level].im_start + (clicked_ypos / screen_height) * im_diff,
-                        fractal_stack[current_level].im_end - ((screen_height - ypos) / screen_height) * im_diff,
+                        fractal_stack[current_level].im_end - ((screen_height - ypos_scaled) / screen_height) * im_diff,
                 };
 
                 // add to next position on stack
