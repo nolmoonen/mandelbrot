@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <pthread.h>
+#include <unistd.h> // sleep
 
 #include "math.h"
 #include "vulkan.h"
@@ -16,6 +18,9 @@
 // limit to the number of iterations in the mandelbrot function
 #define MAX_ITER 80
 
+// limit to the amount of times the fractal can be zoomed into
+#define MAX_LEVELS 20
+
 // defines a fractal through coordinates
 typedef struct Fractal {
     double re_start;
@@ -23,6 +28,10 @@ typedef struct Fractal {
     double im_start;
     double im_end;
 } Fractal;
+
+typedef struct Job {
+    int test;
+} Job;
 
 // mandelbrot variables
 const Fractal FRACTAL_START = {
@@ -34,8 +43,7 @@ const Fractal FRACTAL_START = {
 
 Texture *texture; // current texture
 
-const uint32_t MAX_LEVELS = 20; // maximum amount of times that can be zoomed
-Fractal *fractal_stack; // stack of fractals to go back once zoomed
+Fractal fractal_stack[MAX_LEVELS]; // stack of fractals to go back once zoomed
 uint32_t current_level; // current position on stack
 
 uint32_t screen_width = WIDTH; // width of the screen
@@ -45,6 +53,13 @@ double xpos, ypos; // position of the mouse
 double clicked_xpos, clicked_ypos; // position of the mouse pressed down
 
 bool selecting = false; // whether something is being selected
+
+int done;
+pthread_mutex_t done_mutex;
+
+Job job;
+pthread_mutex_t job_mutex;
+pthread_cond_t job_cv;
 
 static void error_callback(int error, const char *description);
 
@@ -197,8 +212,29 @@ UniformBufferObject calculate_uniform_buffer_object() {
     return (UniformBufferObject) {MAT4F_IDENTITY, MAT4F_IDENTITY, proj};
 }
 
+// compute thread function
+void *compute_function(void *vargp) {
+    // lock and wait for signal
+    pthread_mutex_lock(&job_mutex);
+    while (1) {
+        pthread_mutex_lock(&done_mutex);
+        if (done) {
+            break;
+        }
+        pthread_mutex_unlock(&done_mutex);
+
+        pthread_cond_wait(&job_cv, &job_mutex);
+        printf("doing a job\n");
+        sleep(1);
+    }
+    pthread_mutex_unlock(&job_mutex);
+
+    return NULL;
+}
+
 int main() {
     GLFWwindow *window;
+    pthread_t compute_thread; // the id of the thread making the calculations
 
     // initialize glfw
     if (!glfwInit()) {
@@ -222,7 +258,6 @@ int main() {
     glfwSetMouseButtonCallback(window, mouse_button_callback);
 
     // set up coordinate stack
-    fractal_stack = (Fractal *) malloc(sizeof(Fractal) * MAX_LEVELS);
     current_level = 0;
     fractal_stack[current_level] = FRACTAL_START;
 
@@ -236,27 +271,56 @@ int main() {
         return 1;
     }
 
+    pthread_mutex_init(&done_mutex, NULL);
+
+    // initially not done
+    pthread_mutex_lock(&done_mutex);
+    done = 0;
+    pthread_mutex_unlock(&done_mutex);
+
+    pthread_mutex_init(&job_mutex, NULL);
+    pthread_cond_init(&job_cv, NULL);
+
+    // create the compute thread
+    pthread_create(&compute_thread, NULL, compute_function, NULL);
+
     // create circular buffer for title
-    CircularTickBuffer *circular_buffer = (CircularTickBuffer *) malloc(sizeof(CircularTickBuffer));
-    tick_buffer_init(circular_buffer, 20000, CLOCKS_PER_SEC);
+    CircularTickBuffer circular_buffer;
+    tick_buffer_init(&circular_buffer, 20000, CLOCKS_PER_SEC);
 
     // main loop
+    char title[256];
     while (!glfwWindowShouldClose(window)) {
-        tick_buffer_add(circular_buffer, clock());
+        tick_buffer_add(&circular_buffer, clock());
         glfwPollEvents();
         drawFrame(texture);
 
+        pthread_mutex_lock(&job_mutex);
+        printf("creating a job\n");
+        pthread_cond_signal(&job_cv);
+        pthread_mutex_unlock(&job_mutex);
+
         // create and display title
-        char title[256];
-        title[255] = '\0';
-        snprintf(title, 255, "fps: %d", tick_buffer_query(circular_buffer, clock()));
+        memset(&title[0], 0, sizeof(title)); // clear all values
+        // fill with actual title data
+        snprintf(title, 255, "fps: %d", tick_buffer_query(&circular_buffer, clock()));
+        title[255] = '\0'; // add null terminator
         glfwSetWindowTitle(window, title);
     }
 
+    // signal thread we are done
+    pthread_mutex_lock(&done_mutex);
+    done = 1;
+    pthread_mutex_unlock(&done_mutex);
+
+    // join the compute thread
+    pthread_join(compute_thread, NULL);
+
+    pthread_mutex_destroy(&job_mutex);
+    pthread_cond_destroy(&job_cv);
+
     // free allocated memory
-    free(circular_buffer);
     free(texture);
-    free(fractal_stack);
 
     // wait until vulkan can be terminated
     waitDeviceIdle();
@@ -280,7 +344,7 @@ static void key_callback(GLFWwindow *p_window, int key, int scancode, int action
         glfwSetWindowShouldClose(p_window, GLFW_TRUE);
     }
 
-    // enter refreshes the texture
+    // enter refreshes the texture (needed in case of resize)
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
         fprintf(stdout, "recreating texture..\n");
         recreate_and_submit_texture();

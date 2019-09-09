@@ -16,6 +16,12 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/glfw)
 target_link_libraries(${PROJECT_NAME} glfw ${Vulkan_LIBRARY})
 target_include_directories(${PROJECT_NAME} PRIVATE glfw/include ${Vulkan_INCLUDE_DIR})
 
+# link pthreads
+# https://stackoverflow.com/questions/1620918/cmake-and-libpthread
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+target_link_libraries(mandelbrot Threads::Threads)
+
 # disable building documentation, tests, and examples if build type is release
 if (CMAKE_BUILD_TYPE EQUAL "RELEASE")
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
