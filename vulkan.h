@@ -1721,6 +1721,8 @@ bool recreateTexture() {
     if (!createDescriptorPool()) return false;
     if (!createDescriptorSets()) return false;
     if (!createCommandBuffers()) return false;
+
+    return true;
 }
 
 bool recreateSwapChain() {

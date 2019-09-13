@@ -15,8 +15,11 @@
 #include "complex.h"
 #include "color.h"
 
-// limit to the number of iterations in the mandelbrot function
-#define MAX_ITER 80
+// initial value of max_iterations
+#define INITIAL_MAX_ITER 50
+
+// amount of iterations the maximum number of iterations in the mandelbrot function is increased each step
+#define ITER_STEP 20
 
 // limit to the amount of times the fractal can be zoomed into
 #define MAX_LEVELS 20
@@ -29,10 +32,6 @@ typedef struct Fractal {
     double im_end;
 } Fractal;
 
-typedef struct Job {
-    int test;
-} Job;
-
 // mandelbrot variables
 const Fractal FRACTAL_START = {
         -2, // RE_START
@@ -41,25 +40,33 @@ const Fractal FRACTAL_START = {
         1, // IM_END
 };
 
-Texture *texture; // current texture
+// limit to the number of iterations in the mandelbrot function
+uint32_t max_iterations;
+
+Texture *texture_local; // current texture
+pthread_mutex_t texture_mutex;
 
 Fractal fractal_stack[MAX_LEVELS]; // stack of fractals to go back once zoomed
 uint32_t current_level; // current position on stack
 
-uint32_t screen_width = WIDTH; // width of the screen
-uint32_t screen_height = HEIGHT; // height of the screen
+uint32_t screen_width;
+uint32_t screen_height;
+pthread_mutex_t width_height_mutex;
 
 double xpos, ypos; // position of the mouse
 double clicked_xpos, clicked_ypos; // position of the mouse pressed down
 
 bool selecting = false; // whether something is being selected
 
-int done;
+int done; // program state for stopping threads
 pthread_mutex_t done_mutex;
 
-Job job;
-pthread_mutex_t job_mutex;
-pthread_cond_t job_cv;
+int computing_done;
+pthread_mutex_t computing_done_mutex;
+pthread_cond_t computing_done_cv;
+
+pthread_mutex_t compute_idle_mutex;
+pthread_cond_t compute_idle_cv;
 
 static void error_callback(int error, const char *description);
 
@@ -83,7 +90,7 @@ struct RGB color(double m, double *hues) {
     hsv.h = 255 -
             (uint32_t) (255 * linear_interpolation(hues[(uint32_t) floor(m)], hues[(uint32_t) ceil(m)], fmod(m, 1)));
     hsv.s = 255;
-    hsv.v = m < MAX_ITER ? 255 : 0;
+    hsv.v = m < max_iterations ? 255 : 0;
     struct RGB rgb = HSVtoRGB(hsv);
     return rgb;
 }
@@ -95,13 +102,13 @@ double mandelbrot(struct Complex c) {
     struct Complex z = {0, 0};
     uint32_t n = 0;
 
-    while (abs_complex(z) <= 2 && n < MAX_ITER) {
+    while (abs_complex(z) <= 2 && n < max_iterations) {
         z = add_complex(mul_complex(z, z), c);
         ++n;
     }
 
-    if (n == MAX_ITER) {
-        return MAX_ITER;
+    if (n == max_iterations) {
+        return max_iterations;
     }
 
     return n + 1 - log(log2(abs_complex(z)));
@@ -109,7 +116,7 @@ double mandelbrot(struct Complex c) {
 
 void generate(Texture *p_texture) {
     double *all_iterations = (double *) malloc(sizeof(double) * p_texture->width * p_texture->height);
-    uint32_t histogram[MAX_ITER - 1] = {0};
+    uint32_t *histogram = calloc(max_iterations -1, sizeof(uint32_t));
     uint32_t total = 0;
 
     /*
@@ -132,20 +139,20 @@ void generate(Texture *p_texture) {
             double m = mandelbrot(c);
             all_iterations[y * p_texture->width + x] = m;
 
-            if (m < MAX_ITER) {
+            if (m < max_iterations) {
                 histogram[(uint32_t) floor(m)]++;
                 total++;
             }
         }
     }
 
-    double *hues = (double *) malloc(sizeof(double) * (MAX_ITER + 1));
+    double *hues = (double *) malloc(sizeof(double) * (max_iterations + 1));
     double h = 0;
-    for (uint32_t i = 0; i < MAX_ITER; ++i) {
+    for (uint32_t i = 0; i < max_iterations; ++i) {
         h += histogram[i] / (double) total;
         hues[i] = h;
     }
-    hues[MAX_ITER] = h;
+    hues[max_iterations] = h;
 
     /*
      * calculate and set colors
@@ -171,7 +178,7 @@ void generate(Texture *p_texture) {
 void generate_texture(Texture *p_texture, uint32_t p_width, uint32_t p_height) {
     p_texture->width = p_width;
     p_texture->height = p_height;
-    p_texture->data = (uint8_t *) malloc(sizeof(uint8_t) * p_texture->width * p_texture->height * 4);
+//    p_texture->data = (uint8_t *) malloc(sizeof(uint8_t) * p_texture->width * p_texture->height * 4);
     generate(p_texture);
 }
 
@@ -214,20 +221,55 @@ UniformBufferObject calculate_uniform_buffer_object() {
 
 // compute thread function
 void *compute_function(void *vargp) {
-    // lock and wait for signal
-    pthread_mutex_lock(&job_mutex);
+    max_iterations = INITIAL_MAX_ITER;
     while (1) {
         pthread_mutex_lock(&done_mutex);
-        if (done) {
-            break;
+        {
+            if (done) {
+                break;
+            }
         }
         pthread_mutex_unlock(&done_mutex);
 
-        pthread_cond_wait(&job_cv, &job_mutex);
-        printf("doing a job\n");
-        sleep(1);
+        printf("computing texture..\n");
+
+        // compute next texture
+        pthread_mutex_lock(&texture_mutex);
+        {
+            pthread_mutex_lock(&width_height_mutex);
+            {
+                texture_local->width = screen_width;
+                texture_local->height = screen_height;
+                if (texture_local->width != screen_width || texture_local->height != screen_height) {
+                    free(texture_local->data);
+                    texture_local->data = (uint8_t *) malloc(sizeof(uint8_t) * screen_width * screen_height * 4);
+                }
+            }
+            pthread_mutex_unlock(&width_height_mutex);
+
+            generate(texture_local);
+            max_iterations += ITER_STEP;
+        }
+        pthread_mutex_unlock(&texture_mutex);
+
+        printf("computed texture!\n");
+
+        pthread_mutex_lock(&computing_done_mutex);
+        {
+            computing_done = 1; // tell main thread that texture has been completed
+
+            // signal main thread that compute thread is idle
+            pthread_mutex_lock(&compute_idle_mutex);
+            {
+                pthread_cond_signal(&compute_idle_cv);
+            }
+            pthread_mutex_unlock(&compute_idle_mutex);
+
+            // wait until main thread has recreated texture pipeline
+            pthread_cond_wait(&computing_done_cv, &computing_done_mutex);
+        }
+        pthread_mutex_unlock(&computing_done_mutex);
     }
-    pthread_mutex_unlock(&job_mutex);
 
     return NULL;
 }
@@ -261,25 +303,54 @@ int main() {
     current_level = 0;
     fractal_stack[current_level] = FRACTAL_START;
 
+    // initialize width and height
+    pthread_mutex_init(&width_height_mutex, NULL);
+    pthread_mutex_lock(&width_height_mutex);
+    {
+        screen_width = WIDTH;
+        screen_height = HEIGHT;
+    }
+    pthread_mutex_unlock(&width_height_mutex);
+
     // generate first texture
-    texture = (Texture *) malloc(sizeof(Texture));
-    generate_texture(texture, WIDTH, HEIGHT);
+    pthread_mutex_init(&texture_mutex, NULL);
+    pthread_mutex_lock(&texture_mutex);
+    {
+        texture_local = (Texture *) malloc(sizeof(Texture));
+        pthread_mutex_lock(&width_height_mutex);
+        texture_local->width = screen_width;
+        texture_local->height = screen_height;
+        // allocate since pointer
+        texture_local->data = (uint8_t *) malloc(sizeof(uint8_t) * screen_width * screen_height * 4);
+    }
+    pthread_mutex_unlock(&width_height_mutex);
 
     // initialize vulkan
-    if (!vulkanInit(window, texture, &calculate_uniform_buffer_object)) {
+    if (!vulkanInit(window, texture_local, &calculate_uniform_buffer_object)) {
         glfwTerminate();
         return 1;
     }
 
-    pthread_mutex_init(&done_mutex, NULL);
+    pthread_mutex_unlock(&texture_mutex);
 
-    // initially not done
+    pthread_mutex_init(&done_mutex, NULL);
+    // program initially not done
     pthread_mutex_lock(&done_mutex);
-    done = 0;
+    {
+        done = 0;
+    }
     pthread_mutex_unlock(&done_mutex);
 
-    pthread_mutex_init(&job_mutex, NULL);
-    pthread_cond_init(&job_cv, NULL);
+    pthread_mutex_init(&compute_idle_mutex, NULL);
+    pthread_cond_init (&compute_idle_cv, NULL);
+
+    pthread_mutex_init(&computing_done_mutex, NULL);
+    pthread_cond_init (&computing_done_cv, NULL);
+    pthread_mutex_lock(&computing_done_mutex);
+    {
+        computing_done = 0;
+    }
+    pthread_mutex_unlock(&computing_done_mutex);
 
     // create the compute thread
     pthread_create(&compute_thread, NULL, compute_function, NULL);
@@ -293,12 +364,23 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
         tick_buffer_add(&circular_buffer, clock());
         glfwPollEvents();
-        drawFrame(texture);
+        drawFrame();
 
-        pthread_mutex_lock(&job_mutex);
-        printf("creating a job\n");
-        pthread_cond_signal(&job_cv);
-        pthread_mutex_unlock(&job_mutex);
+        pthread_mutex_lock(&computing_done_mutex);
+        {
+            // if computing is done, recreate texture pipeline
+            if (computing_done) {
+                pthread_mutex_lock(&texture_mutex);
+                {
+                    recreateTexture();
+                }
+                pthread_mutex_unlock(&texture_mutex);
+                // signal compute thread that pipeline has been recreated
+                pthread_cond_signal(&computing_done_cv);
+                computing_done = 0;
+            }
+        }
+        pthread_mutex_unlock(&computing_done_mutex);
 
         // create and display title
         memset(&title[0], 0, sizeof(title)); // clear all values
@@ -308,19 +390,36 @@ int main() {
         glfwSetWindowTitle(window, title);
     }
 
-    // signal thread we are done
+    // set status to done
     pthread_mutex_lock(&done_mutex);
-    done = 1;
+    {
+        done = 1;
+    }
     pthread_mutex_unlock(&done_mutex);
+
+    // wait until compute thread is idle
+    pthread_mutex_lock(&compute_idle_mutex);
+    {
+        pthread_cond_wait(&compute_idle_cv, &compute_idle_mutex);
+    }
+    pthread_mutex_unlock(&compute_idle_mutex);
+
+    // signal compute thread to it stops waiting
+    pthread_mutex_lock(&computing_done_mutex);
+    {
+        pthread_cond_signal(&computing_done_cv);
+    }
+    pthread_mutex_unlock(&computing_done_mutex);
+
+    // todo destroy all mutices
+    // pthread_mutex_destroy(&count_mutex);
+    // pthread_cond_destroy(&count_threshold_cv);
 
     // join the compute thread
     pthread_join(compute_thread, NULL);
 
-    pthread_mutex_destroy(&job_mutex);
-    pthread_cond_destroy(&job_cv);
-
     // free allocated memory
-    free(texture);
+    free(texture_local);
 
     // wait until vulkan can be terminated
     waitDeviceIdle();
@@ -334,7 +433,7 @@ int main() {
 }
 
 void recreate_and_submit_texture() {
-    generate_texture(texture, screen_width, screen_height);
+    generate_texture(texture_local, screen_width, screen_height);
     recreateTexture();
 }
 
@@ -343,7 +442,7 @@ static void key_callback(GLFWwindow *p_window, int key, int scancode, int action
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(p_window, GLFW_TRUE);
     }
-
+    /* todo TEMP DISABLE
     // enter refreshes the texture (needed in case of resize)
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
         fprintf(stdout, "recreating texture..\n");
@@ -359,6 +458,7 @@ static void key_callback(GLFWwindow *p_window, int key, int scancode, int action
             recreate_and_submit_texture();
         }
     }
+     */
 }
 
 static void error_callback(int error, const char *description) {
@@ -371,6 +471,7 @@ static void cursor_position_callback(GLFWwindow *p_window, double pxpos, double 
 }
 
 static void mouse_button_callback(GLFWwindow *p_window, int button, int action, int mods) {
+    /* todo TEMP DISABLE
     // cancel selection
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
         if (selecting) {
@@ -415,9 +516,11 @@ static void mouse_button_callback(GLFWwindow *p_window, int button, int action, 
 
         selecting = false;
     }
+     */
 }
 
 static void framebuffer_resize_callback(GLFWwindow *p_window, int p_width, int p_height) {
+    // todo protect with mutex width and height
     // set new dimensions
     screen_width = p_width;
     screen_height = p_height;
