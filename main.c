@@ -19,7 +19,7 @@
 #define INITIAL_MAX_ITER 50
 
 // amount of iterations the maximum number of iterations in the mandelbrot function is increased each step
-#define ITER_STEP 20
+#define ITER_STEP 10
 
 // limit to the amount of times the fractal can be zoomed into
 #define MAX_LEVELS 20
@@ -40,18 +40,18 @@ const Fractal FRACTAL_START = {
         1, // IM_END
 };
 
+pthread_mutex_t data_mutex;
+
 // limit to the number of iterations in the mandelbrot function
 uint32_t max_iterations;
 
 Texture *texture_local; // current texture
-pthread_mutex_t texture_mutex;
 
 Fractal fractal_stack[MAX_LEVELS]; // stack of fractals to go back once zoomed
 uint32_t current_level; // current position on stack
 
 uint32_t screen_width;
 uint32_t screen_height;
-pthread_mutex_t width_height_mutex;
 
 double xpos, ypos; // position of the mouse
 double clicked_xpos, clicked_ypos; // position of the mouse pressed down
@@ -116,7 +116,7 @@ double mandelbrot(struct Complex c) {
 
 void generate(Texture *p_texture) {
     double *all_iterations = (double *) malloc(sizeof(double) * p_texture->width * p_texture->height);
-    uint32_t *histogram = calloc(max_iterations -1, sizeof(uint32_t));
+    uint32_t *histogram = calloc(max_iterations - 1, sizeof(uint32_t));
     uint32_t total = 0;
 
     /*
@@ -175,13 +175,6 @@ void generate(Texture *p_texture) {
     free(all_iterations);
 }
 
-void generate_texture(Texture *p_texture, uint32_t p_width, uint32_t p_height) {
-    p_texture->width = p_width;
-    p_texture->height = p_height;
-//    p_texture->data = (uint8_t *) malloc(sizeof(uint8_t) * p_texture->width * p_texture->height * 4);
-    generate(p_texture);
-}
-
 UniformBufferObject calculate_uniform_buffer_object() {
     Mat4f proj = MAT4F_IDENTITY;
 
@@ -221,7 +214,6 @@ UniformBufferObject calculate_uniform_buffer_object() {
 
 // compute thread function
 void *compute_function(void *vargp) {
-    max_iterations = INITIAL_MAX_ITER;
     while (1) {
         pthread_mutex_lock(&done_mutex);
         {
@@ -234,23 +226,19 @@ void *compute_function(void *vargp) {
         printf("computing texture..\n");
 
         // compute next texture
-        pthread_mutex_lock(&texture_mutex);
+        pthread_mutex_lock(&data_mutex);
         {
-            pthread_mutex_lock(&width_height_mutex);
-            {
-                texture_local->width = screen_width;
-                texture_local->height = screen_height;
-                if (texture_local->width != screen_width || texture_local->height != screen_height) {
-                    free(texture_local->data);
-                    texture_local->data = (uint8_t *) malloc(sizeof(uint8_t) * screen_width * screen_height * 4);
-                }
+            texture_local->width = screen_width;
+            texture_local->height = screen_height;
+            if (texture_local->width != screen_width || texture_local->height != screen_height) {
+                free(texture_local->data);
+                texture_local->data = (uint8_t *) malloc(sizeof(uint8_t) * screen_width * screen_height * 4);
             }
-            pthread_mutex_unlock(&width_height_mutex);
-
             generate(texture_local);
+
             max_iterations += ITER_STEP;
         }
-        pthread_mutex_unlock(&texture_mutex);
+        pthread_mutex_unlock(&data_mutex);
 
         printf("computed texture!\n");
 
@@ -299,58 +287,43 @@ int main() {
     glfwSetCursorPosCallback(window, cursor_position_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
 
-    // set up coordinate stack
-    current_level = 0;
-    fractal_stack[current_level] = FRACTAL_START;
-
-    // initialize width and height
-    pthread_mutex_init(&width_height_mutex, NULL);
-    pthread_mutex_lock(&width_height_mutex);
+    pthread_mutex_init(&data_mutex, NULL);
+    pthread_mutex_lock(&data_mutex);
     {
+        // set up coordinate stack
+        current_level = 0;
+        fractal_stack[current_level] = FRACTAL_START;
+
+        // initialize width and height
         screen_width = WIDTH;
         screen_height = HEIGHT;
-    }
-    pthread_mutex_unlock(&width_height_mutex);
 
-    // generate first texture
-    pthread_mutex_init(&texture_mutex, NULL);
-    pthread_mutex_lock(&texture_mutex);
-    {
+        max_iterations = INITIAL_MAX_ITER;
+
         texture_local = (Texture *) malloc(sizeof(Texture));
-        pthread_mutex_lock(&width_height_mutex);
         texture_local->width = screen_width;
         texture_local->height = screen_height;
         // allocate since pointer
         texture_local->data = (uint8_t *) malloc(sizeof(uint8_t) * screen_width * screen_height * 4);
-    }
-    pthread_mutex_unlock(&width_height_mutex);
 
-    // initialize vulkan
-    if (!vulkanInit(window, texture_local, &calculate_uniform_buffer_object)) {
-        glfwTerminate();
-        return 1;
-    }
+        // initialize vulkan
+        if (!vulkanInit(window, texture_local, &calculate_uniform_buffer_object)) {
+            glfwTerminate();
+            return 1;
+        }
 
-    pthread_mutex_unlock(&texture_mutex);
-
-    pthread_mutex_init(&done_mutex, NULL);
-    // program initially not done
-    pthread_mutex_lock(&done_mutex);
-    {
+        pthread_mutex_init(&done_mutex, NULL);
+        // program initially not done
         done = 0;
-    }
-    pthread_mutex_unlock(&done_mutex);
 
-    pthread_mutex_init(&compute_idle_mutex, NULL);
-    pthread_cond_init (&compute_idle_cv, NULL);
+        pthread_mutex_init(&compute_idle_mutex, NULL);
+        pthread_cond_init(&compute_idle_cv, NULL);
 
-    pthread_mutex_init(&computing_done_mutex, NULL);
-    pthread_cond_init (&computing_done_cv, NULL);
-    pthread_mutex_lock(&computing_done_mutex);
-    {
+        pthread_mutex_init(&computing_done_mutex, NULL);
+        pthread_cond_init(&computing_done_cv, NULL);
         computing_done = 0;
     }
-    pthread_mutex_unlock(&computing_done_mutex);
+    pthread_mutex_unlock(&data_mutex);
 
     // create the compute thread
     pthread_create(&compute_thread, NULL, compute_function, NULL);
@@ -370,11 +343,12 @@ int main() {
         {
             // if computing is done, recreate texture pipeline
             if (computing_done) {
-                pthread_mutex_lock(&texture_mutex);
+                printf("swapping!\n");
+                pthread_mutex_lock(&data_mutex);
                 {
                     recreateTexture();
                 }
-                pthread_mutex_unlock(&texture_mutex);
+                pthread_mutex_unlock(&data_mutex);
                 // signal compute thread that pipeline has been recreated
                 pthread_cond_signal(&computing_done_cv);
                 computing_done = 0;
@@ -432,11 +406,6 @@ int main() {
     glfwTerminate();
 }
 
-void recreate_and_submit_texture() {
-    generate_texture(texture_local, screen_width, screen_height);
-    recreateTexture();
-}
-
 static void key_callback(GLFWwindow *p_window, int key, int scancode, int action, int mods) {
     // escape closes the window
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
@@ -448,17 +417,20 @@ static void key_callback(GLFWwindow *p_window, int key, int scancode, int action
         fprintf(stdout, "recreating texture..\n");
         recreate_and_submit_texture();
     }
-
+    */
     // backspace zooms out
     if (key == GLFW_KEY_BACKSPACE && action == GLFW_PRESS) {
         if (current_level == 0) {
             fprintf(stdout, "cannot go back!\n");
         } else {
-            current_level--;
-            recreate_and_submit_texture();
+            pthread_mutex_lock(&data_mutex);
+            {
+                current_level--;
+                max_iterations = INITIAL_MAX_ITER;
+            }
+            pthread_mutex_unlock(&data_mutex);
         }
     }
-     */
 }
 
 static void error_callback(int error, const char *description) {
@@ -471,7 +443,6 @@ static void cursor_position_callback(GLFWwindow *p_window, double pxpos, double 
 }
 
 static void mouse_button_callback(GLFWwindow *p_window, int button, int action, int mods) {
-    /* todo TEMP DISABLE
     // cancel selection
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
         if (selecting) {
@@ -493,30 +464,35 @@ static void mouse_button_callback(GLFWwindow *p_window, int button, int action, 
             fprintf(stdout, "maximum depth reached!\n");
         } else {
             if (selecting) { // to allow for canceling selection
-                // obtain new ypos based on aspect ratio rather than real ypos
-                double ypos_scaled = clicked_ypos + ((xpos - clicked_xpos) / (double) screen_width) * screen_height;
+                // prevent generation happening while changing coordinates
+                pthread_mutex_lock(&data_mutex);
+                {
+                    // obtain new ypos based on aspect ratio rather than real ypos
+                    double ypos_scaled = clicked_ypos + ((xpos - clicked_xpos) / (double) screen_width) * screen_height;
 
-                double re_diff = fractal_stack[current_level].re_end - fractal_stack[current_level].re_start;
-                double im_diff = fractal_stack[current_level].im_end - fractal_stack[current_level].im_start;
+                    double re_diff = fractal_stack[current_level].re_end - fractal_stack[current_level].re_start;
+                    double im_diff = fractal_stack[current_level].im_end - fractal_stack[current_level].im_start;
 
-                // new fractal definition
-                Fractal new_pos = {
-                        fractal_stack[current_level].re_start + (clicked_xpos / screen_width) * re_diff,
-                        fractal_stack[current_level].re_end - ((screen_width - xpos) / screen_width) * re_diff,
-                        fractal_stack[current_level].im_start + (clicked_ypos / screen_height) * im_diff,
-                        fractal_stack[current_level].im_end - ((screen_height - ypos_scaled) / screen_height) * im_diff,
-                };
+                    // new fractal definition
+                    Fractal new_pos = {
+                            fractal_stack[current_level].re_start + (clicked_xpos / screen_width) * re_diff,
+                            fractal_stack[current_level].re_end - ((screen_width - xpos) / screen_width) * re_diff,
+                            fractal_stack[current_level].im_start + (clicked_ypos / screen_height) * im_diff,
+                            fractal_stack[current_level].im_end -
+                            ((screen_height - ypos_scaled) / screen_height) * im_diff,
+                    };
 
-                // add to next position on stack
-                fractal_stack[++current_level] = new_pos;
+                    // add to next position on stack
+                    fractal_stack[++current_level] = new_pos;
 
-                recreate_and_submit_texture();
+                    max_iterations = INITIAL_MAX_ITER;
+                }
+                pthread_mutex_unlock(&data_mutex);
             }
         }
 
         selecting = false;
     }
-     */
 }
 
 static void framebuffer_resize_callback(GLFWwindow *p_window, int p_width, int p_height) {

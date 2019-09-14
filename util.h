@@ -30,6 +30,7 @@ uint32_t max(uint32_t a, uint32_t b) {
 
 static char *readFile(const char *filename) {
     char *buffer = 0;
+    errno = 0;
     FILE *f = fopen(filename, "rb");
 
     if (f) {
@@ -44,23 +45,26 @@ static char *readFile(const char *filename) {
         }
         fclose(f);
     } else {
-        fprintf(stderr, "util: could not open file\n");
+        fprintf(stderr, "util: could not open file %d\n", errno);
     }
 
     return buffer;
 }
 
 static uint32_t fileSize(const char *filename) {
+    uint32_t size = 0;
+    errno = 0;
     FILE *f = fopen(filename, "rb");
 
     if (f) {
         fseek(f, 0, SEEK_END);
-        return ftell(f);
+        size = ftell(f);
+        fclose(f);
     } else {
-        fprintf(stderr, "util: could not open file\n");
+        fprintf(stderr, "util: could not open file %d\n", errno);
     }
 
-    return 0;
+    return size;
 }
 
 typedef struct CircularTickBuffer {
