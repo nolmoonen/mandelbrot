@@ -10,6 +10,8 @@ For Vulkan, [this](https://vulkan-tutorial.com/) tutorial was used.
 * Build using CMake.
 
 ## Todo
-* Save texture when zooming (invalidate stack when resizing).
-* Deal with recreating texture while still resizing.
-* Increasing maximum iterations over time.
+* Preemption to compute thread in the case of resizing, zooming in/out, closing application.
+* Saving texture as bitmap.
+* Full screen mode (for saving 1920x1080 textures).
+* Prevent stretching in resolutions other than 800x600.
+* Optimization.

@@ -16,13 +16,13 @@
 #include "color.h"
 
 // initial value of max_iterations
-#define INITIAL_MAX_ITER 50
+#define INITIAL_MAX_ITER 60
 
 // amount of iterations the maximum number of iterations in the mandelbrot function is increased each step
-#define ITER_STEP 10
+#define ITER_STEP 20
 
 // limit to the amount of times the fractal can be zoomed into
-#define MAX_LEVELS 20
+#define MAX_LEVELS 32
 
 // defines a fractal through coordinates
 typedef struct Fractal {
@@ -40,7 +40,7 @@ const Fractal FRACTAL_START = {
         1, // IM_END
 };
 
-pthread_mutex_t data_mutex;
+pthread_mutex_t data_mutex; // protects all data shared between compute and window/render thread
 
 // limit to the number of iterations in the mandelbrot function
 uint32_t max_iterations;
@@ -48,7 +48,7 @@ uint32_t max_iterations;
 Texture *texture_local; // current texture
 
 Fractal fractal_stack[MAX_LEVELS]; // stack of fractals to go back once zoomed
-uint32_t current_level; // current position on stack
+uint32_t current_level = 0; // current position on stack
 
 uint32_t screen_width;
 uint32_t screen_height;
@@ -58,10 +58,10 @@ double clicked_xpos, clicked_ypos; // position of the mouse pressed down
 
 bool selecting = false; // whether something is being selected
 
-int done; // program state for stopping threads
-pthread_mutex_t done_mutex;
+bool done = false; // program state for stopping the compute thread
+pthread_mutex_t done_mutex; // protects the done mutex
 
-int computing_done;
+bool computing_done = false; // whether compute thread is done computing, and render thread may swap textures
 pthread_mutex_t computing_done_mutex;
 pthread_cond_t computing_done_cv;
 
@@ -137,6 +137,7 @@ void generate(Texture *p_texture) {
 
             // compute number of iterations
             double m = mandelbrot(c);
+            // todo: make this this cache aware
             all_iterations[y * p_texture->width + x] = m;
 
             if (m < max_iterations) {
@@ -160,6 +161,7 @@ void generate(Texture *p_texture) {
     for (uint32_t x = 0; x < p_texture->width; ++x) {
         for (uint32_t y = 0; y < p_texture->height; ++y) {
             // create color, based on the number of iterations
+            // todo: make this cache aware
             struct RGB rgb = color(all_iterations[y * p_texture->width + x], hues);
 
             // fill data
@@ -212,7 +214,7 @@ UniformBufferObject calculate_uniform_buffer_object() {
     return (UniformBufferObject) {MAT4F_IDENTITY, MAT4F_IDENTITY, proj};
 }
 
-// compute thread function
+// compute thread function, non-preemptive
 void *compute_function(void *vargp) {
     while (1) {
         pthread_mutex_lock(&done_mutex);
@@ -223,14 +225,12 @@ void *compute_function(void *vargp) {
         }
         pthread_mutex_unlock(&done_mutex);
 
-        printf("computing texture..\n");
-
         // compute next texture
         pthread_mutex_lock(&data_mutex);
         {
-            texture_local->width = screen_width;
-            texture_local->height = screen_height;
             if (texture_local->width != screen_width || texture_local->height != screen_height) {
+                texture_local->width = screen_width;
+                texture_local->height = screen_height;
                 free(texture_local->data);
                 texture_local->data = (uint8_t *) malloc(sizeof(uint8_t) * screen_width * screen_height * 4);
             }
@@ -240,11 +240,9 @@ void *compute_function(void *vargp) {
         }
         pthread_mutex_unlock(&data_mutex);
 
-        printf("computed texture!\n");
-
         pthread_mutex_lock(&computing_done_mutex);
         {
-            computing_done = 1; // tell main thread that texture has been completed
+            computing_done = true; // tell main thread that texture has been completed
 
             // signal main thread that compute thread is idle
             pthread_mutex_lock(&compute_idle_mutex);
@@ -263,8 +261,8 @@ void *compute_function(void *vargp) {
 }
 
 int main() {
-    GLFWwindow *window;
-    pthread_t compute_thread; // the id of the thread making the calculations
+    GLFWwindow *window; // window handle
+    pthread_t compute_thread; // the id of the thread making the calculations, needed for joining
 
     // initialize glfw
     if (!glfwInit()) {
@@ -288,42 +286,34 @@ int main() {
     glfwSetMouseButtonCallback(window, mouse_button_callback);
 
     pthread_mutex_init(&data_mutex, NULL);
-    pthread_mutex_lock(&data_mutex);
-    {
-        // set up coordinate stack
-        current_level = 0;
-        fractal_stack[current_level] = FRACTAL_START;
 
-        // initialize width and height
-        screen_width = WIDTH;
-        screen_height = HEIGHT;
+    // set up coordinate stack
+    fractal_stack[current_level] = FRACTAL_START;
 
-        max_iterations = INITIAL_MAX_ITER;
+    // initialize width and height
+    screen_width = WIDTH;
+    screen_height = HEIGHT;
 
-        texture_local = (Texture *) malloc(sizeof(Texture));
-        texture_local->width = screen_width;
-        texture_local->height = screen_height;
-        // allocate since pointer
-        texture_local->data = (uint8_t *) malloc(sizeof(uint8_t) * screen_width * screen_height * 4);
+    max_iterations = INITIAL_MAX_ITER;
 
-        // initialize vulkan
-        if (!vulkanInit(window, texture_local, &calculate_uniform_buffer_object)) {
-            glfwTerminate();
-            return 1;
-        }
+    texture_local = (Texture *) malloc(sizeof(Texture));
+    texture_local->width = screen_width;
+    texture_local->height = screen_height;
+    // separately allocate this memory since "data" is a pointer
+    texture_local->data = (uint8_t *) malloc(sizeof(uint8_t) * screen_width * screen_height * 4);
 
-        pthread_mutex_init(&done_mutex, NULL);
-        // program initially not done
-        done = 0;
-
-        pthread_mutex_init(&compute_idle_mutex, NULL);
-        pthread_cond_init(&compute_idle_cv, NULL);
-
-        pthread_mutex_init(&computing_done_mutex, NULL);
-        pthread_cond_init(&computing_done_cv, NULL);
-        computing_done = 0;
+    // initialize vulkan
+    if (!vulkanInit(window, texture_local, &calculate_uniform_buffer_object)) {
+        glfwTerminate();
+        return 1;
     }
-    pthread_mutex_unlock(&data_mutex);
+
+    // initialize synchronization variables
+    pthread_mutex_init(&done_mutex, NULL);
+    pthread_mutex_init(&compute_idle_mutex, NULL);
+    pthread_cond_init(&compute_idle_cv, NULL);
+    pthread_mutex_init(&computing_done_mutex, NULL);
+    pthread_cond_init(&computing_done_cv, NULL);
 
     // create the compute thread
     pthread_create(&compute_thread, NULL, compute_function, NULL);
@@ -334,6 +324,8 @@ int main() {
 
     // main loop
     char title[256];
+    uint32_t max_iter_copy = INITIAL_MAX_ITER; // local copy of max_iterations
+    uint32_t current_lvl_copy = 0; // local copy of current_level
     while (!glfwWindowShouldClose(window)) {
         tick_buffer_add(&circular_buffer, clock());
         glfwPollEvents();
@@ -343,15 +335,19 @@ int main() {
         {
             // if computing is done, recreate texture pipeline
             if (computing_done) {
-                printf("swapping!\n");
                 pthread_mutex_lock(&data_mutex);
                 {
                     recreateTexture();
+
+                    // cache variables for title. obtaining mutex in window thread would be too slow
+                    max_iter_copy = max_iterations;
+                    current_lvl_copy = current_level;
                 }
                 pthread_mutex_unlock(&data_mutex);
+
                 // signal compute thread that pipeline has been recreated
                 pthread_cond_signal(&computing_done_cv);
-                computing_done = 0;
+                computing_done = false;
             }
         }
         pthread_mutex_unlock(&computing_done_mutex);
@@ -359,15 +355,16 @@ int main() {
         // create and display title
         memset(&title[0], 0, sizeof(title)); // clear all values
         // fill with actual title data
-        snprintf(title, 255, "fps: %d", tick_buffer_query(&circular_buffer, clock()));
+        snprintf(title, 255, "fps: %d iter: %d lvl: %d",
+                 tick_buffer_query(&circular_buffer, clock()), max_iter_copy, current_lvl_copy);
         title[255] = '\0'; // add null terminator
         glfwSetWindowTitle(window, title);
     }
 
-    // set status to done
+    // set status to done to signal compute thread to stop
     pthread_mutex_lock(&done_mutex);
     {
-        done = 1;
+        done = true;
     }
     pthread_mutex_unlock(&done_mutex);
 
@@ -385,9 +382,15 @@ int main() {
     }
     pthread_mutex_unlock(&computing_done_mutex);
 
-    // todo destroy all mutices
-    // pthread_mutex_destroy(&count_mutex);
-    // pthread_cond_destroy(&count_threshold_cv);
+    // destroy all mutices
+    pthread_mutex_destroy(&done_mutex);
+    pthread_mutex_destroy(&computing_done_mutex);
+    pthread_mutex_destroy(&compute_idle_mutex);
+    pthread_mutex_destroy(&data_mutex);
+
+    // destroy all condition variables
+    pthread_cond_destroy(&computing_done_cv);
+    pthread_cond_destroy(&compute_idle_cv);
 
     // join the compute thread
     pthread_join(compute_thread, NULL);
@@ -411,13 +414,7 @@ static void key_callback(GLFWwindow *p_window, int key, int scancode, int action
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(p_window, GLFW_TRUE);
     }
-    /* todo TEMP DISABLE
-    // enter refreshes the texture (needed in case of resize)
-    if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
-        fprintf(stdout, "recreating texture..\n");
-        recreate_and_submit_texture();
-    }
-    */
+
     // backspace zooms out
     if (key == GLFW_KEY_BACKSPACE && action == GLFW_PRESS) {
         if (current_level == 0) {
@@ -496,11 +493,17 @@ static void mouse_button_callback(GLFWwindow *p_window, int button, int action, 
 }
 
 static void framebuffer_resize_callback(GLFWwindow *p_window, int p_width, int p_height) {
-    // todo protect with mutex width and height
-    // set new dimensions
-    screen_width = p_width;
-    screen_height = p_height;
+    pthread_mutex_lock(&data_mutex);
+    {
+        // set new dimensions
+        screen_width = p_width;
+        screen_height = p_height;
 
-    // let vulkan know to rebuild swap chain
-    framebufferResized = true;
+        // reset max iterations
+        max_iterations = INITIAL_MAX_ITER;
+
+        // let vulkan know to rebuild swap chain
+        framebufferResized = true;
+    }
+    pthread_mutex_unlock(&data_mutex);
 }
