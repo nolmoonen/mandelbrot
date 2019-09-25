@@ -14,4 +14,3 @@ For Vulkan, [this](https://vulkan-tutorial.com/) tutorial was used.
 * Saving texture as bitmap.
 * Full screen mode (for saving 1920x1080 textures).
 * Prevent stretching in resolutions other than 800x600.
-* Optimization.

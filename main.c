@@ -122,13 +122,10 @@ void generate(Texture *p_texture) {
     /*
      * calculate iterations
      */
-    for (uint32_t x = 0; x < p_texture->width; ++x) {
-        for (uint32_t y = 0; y < p_texture->height; ++y) {
-            double re_diff =
-                    fractal_stack[current_level].re_end - fractal_stack[current_level].re_start;
-            double im_diff =
-                    fractal_stack[current_level].im_end - fractal_stack[current_level].im_start;
-
+    double re_diff = fractal_stack[current_level].re_end - fractal_stack[current_level].re_start;
+    double im_diff = fractal_stack[current_level].im_end - fractal_stack[current_level].im_start;
+    for (uint32_t y = 0; y < p_texture->height; ++y) {
+        for (uint32_t x = 0; x < p_texture->width; ++x) {
             // convert pixel coordinate to complex number
             struct Complex c = {
                     fractal_stack[current_level].re_start + (x / (double) p_texture->width) * re_diff,
@@ -137,7 +134,6 @@ void generate(Texture *p_texture) {
 
             // compute number of iterations
             double m = mandelbrot(c);
-            // todo: make this this cache aware
             all_iterations[y * p_texture->width + x] = m;
 
             if (m < max_iterations) {
@@ -158,10 +154,9 @@ void generate(Texture *p_texture) {
     /*
      * calculate and set colors
      */
-    for (uint32_t x = 0; x < p_texture->width; ++x) {
-        for (uint32_t y = 0; y < p_texture->height; ++y) {
+    for (uint32_t y = 0; y < p_texture->height; ++y) {
+        for (uint32_t x = 0; x < p_texture->width; ++x) {
             // create color, based on the number of iterations
-            // todo: make this cache aware
             struct RGB rgb = color(all_iterations[y * p_texture->width + x], hues);
 
             // fill data
