@@ -24,6 +24,9 @@
 // limit to the amount of times the fractal can be zoomed into
 #define MAX_LEVELS 32
 
+// resolution of the fractal defined by the FRACTAL_START coordinates
+#define RESOLUTION (4.0f / 3.0f)
+
 // defines a fractal through coordinates
 typedef struct Fractal {
     double re_start;
@@ -32,7 +35,7 @@ typedef struct Fractal {
     double im_end;
 } Fractal;
 
-// mandelbrot variables
+// mandelbrot variables for defined RESOLUTION
 const Fractal FRACTAL_START = {
         -2, // RE_START
         1, // RE_END
@@ -282,7 +285,7 @@ int main() {
 
     pthread_mutex_init(&data_mutex, NULL);
 
-    // set up coordinate stack
+    // set up coordinate stack (initial window size is appropriate for RESOLUTION)
     fractal_stack[current_level] = FRACTAL_START;
 
     // initialize width and height
@@ -496,6 +499,22 @@ static void framebuffer_resize_callback(GLFWwindow *p_window, int p_width, int p
 
         // reset max iterations
         max_iterations = INITIAL_MAX_ITER;
+
+        // clear the stack and reset pointer
+        current_level = 0;
+
+        // set the start coordinates based on new resolution
+        fractal_stack[0] = FRACTAL_START;
+        double new_res = p_width / (double) p_height;
+        if (new_res < RESOLUTION) { // new height is larger, so scale height parameters up
+            fractal_stack[0].im_start *= (RESOLUTION / new_res);
+            fractal_stack[0].im_end *= (RESOLUTION / new_res);
+        } else if (new_res > RESOLUTION) { // new width is larger, so scale width parameters up
+            fractal_stack[0].re_start *= (new_res / RESOLUTION);
+            fractal_stack[0].re_end *= (new_res / RESOLUTION);
+        } else {
+            // resolution is exactly the same, and FRACTAL_START is appropriate
+        }
 
         // let vulkan know to rebuild swap chain
         framebufferResized = true;
