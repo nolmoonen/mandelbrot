@@ -1,7 +1,3 @@
-//
-// Created by Nol on 09/05/2019.
-//
-
 #ifndef VULKAN_H
 #define VULKAN_H
 
@@ -12,7 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "util.h"
-#include "math.h"
+#include "nmmath.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -515,7 +511,7 @@ struct SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) {
     }
 
     vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details.nrof_presentModes, NULL);
-    details.presentModes = (VkPresentModeKHR *) malloc(sizeof(VkPresentModeKHR) * details.nrof_formats);
+    details.presentModes = (VkPresentModeKHR *) malloc(sizeof(VkPresentModeKHR) * details.nrof_presentModes);
 
     if (details.nrof_presentModes != 0) {
         vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details.nrof_presentModes, details.presentModes);
@@ -721,7 +717,11 @@ bool createSwapChain() {
 
     vkGetSwapchainImagesKHR(logicalDevice, swapChain, &imageCount, NULL);
     nrof_swapChainImages = imageCount;
-    swapChainImages = (VkImage *) malloc(sizeof(VkImage) * imageCount);
+    swapChainImages = malloc(sizeof(VkImage) * imageCount);
+    if (swapChainImages == NULL) {
+        fprintf(stderr, "failed to allocate memory\n");
+        return false;
+    }
     vkGetSwapchainImagesKHR(logicalDevice, swapChain, &imageCount, swapChainImages);
 
     swapChainImageFormat = surfaceFormat.format;

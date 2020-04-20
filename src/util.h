@@ -1,7 +1,3 @@
-//
-// Created by Nol on 10/05/2019.
-//
-
 #ifndef MANDELBROT_UTIL_H
 #define MANDELBROT_UTIL_H
 

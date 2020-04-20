@@ -5,7 +5,7 @@ The fractal generation and visualization was created using [this](https://www.co
 For Vulkan, [this](https://vulkan-tutorial.com/) tutorial was used.
 
 ## Building
-* Clone [GLFW](https://github.com/glfw/glfw) in directory `glfw`.
+* Clone [GLFW 3.3.2](https://github.com/glfw/glfw/releases/tag/3.3.2) source code into directory `external/glfw-3.3.2`.
 * Install [Vulkan SDK](https://www.lunarg.com/vulkan-sdk/).
 * Build using CMake.
 
@@ -14,7 +14,7 @@ For Vulkan, [this](https://vulkan-tutorial.com/) tutorial was used.
 * Computations are done on a seperate thread to keep the window responsive.
 
 ## Controls
-* Click with LMB and hold to make a selection.
+* Click and hold with LMB to make a selection.
     * Release to zoom in.
     * Click with RMB to cancel selection.
 * Press backspace to zoom out.

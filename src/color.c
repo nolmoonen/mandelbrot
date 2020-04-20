@@ -1,32 +1,10 @@
-//
-// Created by Nol on 04/05/2019.
-//
-
-#ifndef MANDELBROT_COLOR_H
-#define MANDELBROT_COLOR_H
-
-/**
- * Red Green Blue color.
- */
-struct RGB {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-};
-
-/**
- * Hue Saturation Value color.
- */
-struct HSV {
-    uint8_t h;
-    uint8_t s;
-    uint8_t v;
-};
+#include <stdint.h>
+#include "color.h"
 
 /**
  * Converts a HSV color to a RGB one.
  */
-struct RGB HSVtoRGB(struct HSV hsv) {
+color_t HSVtoRGB(color_t hsv) {
     if (hsv.s) {
         // s != 0
         uint8_t region, remainder, p, q, t;
@@ -37,7 +15,7 @@ struct RGB HSVtoRGB(struct HSV hsv) {
         q = (hsv.v * (255 - ((hsv.s * remainder) >> 8))) >> 8;
         t = (hsv.v * (255 - ((hsv.s * (255 - remainder)) >> 8))) >> 8;
 
-        struct RGB rgb = {0};
+        color_t rgb = {0};
         switch (region) {
             case 0:
                 rgb.r = (uint8_t) hsv.v;
@@ -74,9 +52,7 @@ struct RGB HSVtoRGB(struct HSV hsv) {
         return rgb;
     } else {
         // s == 0
-        struct RGB rgb = {(uint8_t) hsv.v, (uint8_t) hsv.v, (uint8_t) hsv.v};
+        color_t rgb = {(uint8_t) hsv.v, (uint8_t) hsv.v, (uint8_t) hsv.v};
         return rgb;
     }
 }
-
-#endif //MANDELBROT_COLOR_H

@@ -3,7 +3,12 @@ project(mandelbrot C)
 
 set(CMAKE_C_STANDARD 99)
 
-add_executable(mandelbrot main.c vulkan.h stb_image.h)
+# recursively find source and header files
+file(GLOB_RECURSE SOURCES ${PROJECT_SOURCE_DIR}/src/*.c ${PROJECT_SOURCE_DIR}/third-party/*.c)
+file(GLOB_RECURSE HEADERS ${PROJECT_SOURCE_DIR}/src/*.h ${PROJECT_SOURCE_DIR}/third-party/*.h)
+
+add_executable(${CMAKE_PROJECT_NAME} ${SOURCES} ${HEADERS})
+target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/third-party)
 
 # try to find Vulkan
 find_package(Vulkan)
@@ -12,7 +17,7 @@ IF (${Vulkan_FOUND})
 ENDIF (${Vulkan_FOUND})
 
 # add GLFW library, link Vulkan
-add_subdirectory(${PROJECT_SOURCE_DIR}/glfw)
+add_subdirectory(${PROJECT_SOURCE_DIR}/external/glfw-3.3.2)
 target_link_libraries(${PROJECT_NAME} glfw ${Vulkan_LIBRARY})
 target_include_directories(${PROJECT_NAME} PRIVATE glfw/include ${Vulkan_INCLUDE_DIR})
 
