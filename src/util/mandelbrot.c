@@ -1,12 +1,12 @@
 #include <stdint.h>
 #include "complex.h"
 #include "mandelbrot.h"
-#include "nmmath.h"
 #include "math.h"
+#include "nm_math.h"
 
 color_t color(double m, double *hues, uint32_t max_iterations) {
     color_t hsv;
-    hsv.h = 255 - (uint32_t) (255 * lerp(hues[(uint32_t) floor(m)], hues[(uint32_t) ceil(m)], fmod(m, 1)));
+    hsv.h = 255 - (uint32_t) (255 * nm_lerp(hues[(uint32_t) floor(m)], hues[(uint32_t) ceil(m)], fmod(m, 1)));
     hsv.s = 255;
     hsv.v = m < max_iterations ? 255 : 0;
     color_t rgb = HSVtoRGB(hsv);
