@@ -6,7 +6,8 @@
 #include "util.h"
 #include "log.h"
 
-int create_tick_buffer(circular_tick_buffer_t *t_buffer, uint64_t t_size, uint64_t t_dt) {
+int create_tick_buffer(circular_tick_buffer_t *t_buffer, uint64_t t_size, uint64_t t_dt)
+{
     t_buffer->m_size = t_size;
     t_buffer->m_dt = t_dt;
     t_buffer->m_array = malloc(t_buffer->m_size * sizeof(clock_t));
@@ -22,14 +23,16 @@ int create_tick_buffer(circular_tick_buffer_t *t_buffer, uint64_t t_size, uint64
     return EXIT_SUCCESS;
 }
 
-int tick_buffer_add(circular_tick_buffer_t *t_buffer, clock_t t_value) {
+int tick_buffer_add(circular_tick_buffer_t *t_buffer, clock_t t_value)
+{
     t_buffer->m_array[t_buffer->m_pointer++] = t_value;
     t_buffer->m_pointer %= t_buffer->m_size;
 
     return EXIT_SUCCESS;
 }
 
-uint64_t tick_buffer_query(circular_tick_buffer_t *t_buffer, clock_t t_value) {
+uint64_t tick_buffer_query(circular_tick_buffer_t *t_buffer, clock_t t_value)
+{
     uint64_t pointer_clone = t_buffer->m_pointer;
     uint64_t count = (uint64_t) -1;
 
@@ -42,14 +45,16 @@ uint64_t tick_buffer_query(circular_tick_buffer_t *t_buffer, clock_t t_value) {
     return count;
 }
 
-int delete_tick_buffer(circular_tick_buffer_t *t_buffer) {
+int delete_tick_buffer(circular_tick_buffer_t *t_buffer)
+{
     free(t_buffer->m_array);
 
     return EXIT_SUCCESS;
 }
 
 // fixme not tested yet
-int file_size(uint32_t *t_size, const char *t_file_path) {
+int file_size(uint32_t *t_size, const char *t_file_path)
+{
     FILE *fp;
 
     if ((fp = fopen(t_file_path, "r")) == NULL) {
@@ -70,7 +75,8 @@ int file_size(uint32_t *t_size, const char *t_file_path) {
 }
 
 // fixme not tested yet
-int read_to_buffer(char *t_buffer, const char *t_file_path, uint32_t t_file_size) {
+int read_to_buffer(char *t_buffer, const char *t_file_path, uint32_t t_file_size)
+{
     FILE *fp;
 
     if ((fp = fopen(t_file_path, "r")) == NULL) {

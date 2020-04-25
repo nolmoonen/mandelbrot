@@ -21,7 +21,8 @@ const GLfloat QUAD_TEX[] = {
         1.0f, 0.0f
 };
 
-int create_quad(quad *p_quad) {
+int create_quad(quad *p_quad)
+{
     // create VAO
     glGenVertexArrays(1, &p_quad->vao);
     glBindVertexArray(p_quad->vao);
@@ -47,7 +48,8 @@ int create_quad(quad *p_quad) {
     return EXIT_SUCCESS;
 }
 
-int delete_quad(quad *p_quad) {
+int delete_quad(quad *p_quad)
+{
     glDeleteBuffers(1, &p_quad->vbo_tex);
     glDeleteBuffers(1, &p_quad->vbo_pos);
     glDeleteVertexArrays(1, &p_quad->vao);

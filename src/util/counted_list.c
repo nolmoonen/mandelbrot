@@ -9,7 +9,8 @@ int create_clist(
         clist_t *t_clist, size_t t_num, size_t t_size,
         int (*t_create_fun)(void *, uint32_t),
         int (*t_delete_fun)(void *, uint32_t)
-) {
+)
+{
     t_clist->m_num = t_num;
     t_clist->m_size = t_size;
 
@@ -31,7 +32,8 @@ int create_clist(
     return EXIT_SUCCESS;
 }
 
-void delete_clist(clist_t *t_clist) {
+void delete_clist(clist_t *t_clist)
+{
     for (uint32_t i = 0; i < t_clist->m_num; i++) {
         if (t_clist->m_list[i].m_access != -1) {
             (*t_clist->m_delete_fun)(t_clist->m_list[i].m_item, t_clist->m_list[i].m_id);
@@ -41,7 +43,8 @@ void delete_clist(clist_t *t_clist) {
     free(t_clist->m_list);
 }
 
-int get_clist(clist_t *t_clist, void *t_item, uint32_t t_id) {
+int get_clist(clist_t *t_clist, void *t_item, uint32_t t_id)
+{
     /** try to find in buffer */
     for (uint32_t i = 0; i < t_clist->m_num; i++) {
         if (t_clist->m_list[i].m_id == t_id) {

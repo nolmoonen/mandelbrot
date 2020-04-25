@@ -4,13 +4,13 @@
 #include <stdint.h>
 #include <GLFW/glfw3.h>
 
-GLFWwindow *window;
+GLFWwindow *m_window;
 
-extern const uint32_t INITIAL_WIDTH;
-extern const uint32_t INITIAL_HEIGHT;
+static const uint32_t INITIAL_WIDTH = 800;
+static const uint32_t INITIAL_HEIGHT = 600;
 
-uint32_t window_width;
-uint32_t window_height;
+uint32_t m_window_width;
+uint32_t m_window_height;
 
 /** Call to {@link cleanup_window} is required if EXIT_SUCCESS is returned. */
 int init_window();
@@ -18,6 +18,8 @@ int init_window();
 int cleanup_window();
 
 bool window_should_close();
+
+void set_window_to_close();
 
 int swap_window_buffers();
 

@@ -10,7 +10,8 @@ int create_shader_program(
         shader_program_t *t_shader_program,
         const char *t_vert_shader_text, size_t t_vert_shader_size,
         const char *t_frag_shader_text, size_t t_frag_shader_size
-) {
+)
+{
     GLuint vert_shader, frag_shader; // shaders
 
     // create vertex shader
@@ -79,13 +80,15 @@ int create_shader_program(
     return EXIT_SUCCESS;
 }
 
-int delete_shader_program(shader_program_t *t_shader_program) {
+int delete_shader_program(shader_program_t *t_shader_program)
+{
     glDeleteProgram(t_shader_program->m_shader_program);
 
     return EXIT_SUCCESS;
 }
 
-int create_shader(GLuint *t_shader, const char *t_shader_text, GLint t_shader_size, bool t_is_vertex) {
+int create_shader(GLuint *t_shader, const char *t_shader_text, GLint t_shader_size, bool t_is_vertex)
+{
     if (t_is_vertex) {
         *t_shader = glCreateShader(GL_VERTEX_SHADER);
     } else {
@@ -122,25 +125,29 @@ int create_shader(GLuint *t_shader, const char *t_shader_text, GLint t_shader_si
     return EXIT_SUCCESS;
 }
 
-int delete_shader(GLuint t_shader) {
+int delete_shader(GLuint t_shader)
+{
     glDeleteShader(t_shader);
 
     return EXIT_SUCCESS;
 }
 
-int use_shader_program(shader_program_t *t_shader_program) {
+int use_shader_program(shader_program_t *t_shader_program)
+{
     glUseProgram(t_shader_program->m_shader_program);
 
     return EXIT_SUCCESS;
 }
 
-int unuse_shader_program() {
+int unuse_shader_program()
+{
     glUseProgram(0);
 
     return EXIT_SUCCESS;
 }
 
-int set_mat4x4(shader_program_t *t_shader_program, const char *t_name, mat4x4 t_val) {
+int set_mat4x4(shader_program_t *t_shader_program, const char *t_name, mat4x4 t_val)
+{
     GLint location = glGetUniformLocation(t_shader_program->m_shader_program, t_name);
     glUniformMatrix4fv(location, 1, GL_FALSE, t_val);
 
@@ -148,7 +155,8 @@ int set_mat4x4(shader_program_t *t_shader_program, const char *t_name, mat4x4 t_
 }
 
 // todo: collapse these functions
-int create_tex_from_file(tex_t *t_tex, const char *t_tex_file, GLenum t_texture_unit) {
+int create_tex_from_file(tex_t *t_tex, const char *t_tex_file, GLenum t_texture_unit)
+{
     glGenTextures(1, &t_tex->m_tex_id);
     glBindTexture(GL_TEXTURE_2D, t_tex->m_tex_id);
 
@@ -193,7 +201,8 @@ int create_tex_from_file(tex_t *t_tex, const char *t_tex_file, GLenum t_texture_
 int create_tex_from_mem(
         tex_t *t_tex, const char *t_tex_data, size_t t_tex_len, GLenum t_texture_unit,
         uint32_t t_channel_count
-) {
+)
+{
     glGenTextures(1, &t_tex->m_tex_id);
     glBindTexture(GL_TEXTURE_2D, t_tex->m_tex_id);
 
@@ -242,7 +251,8 @@ int create_tex_from_mem(
 int create_tex_from_buffer(
         tex_t *t_tex, const char *t_tex_data, uint32_t width, uint32_t height, GLenum t_texture_unit,
         uint32_t t_channel_count
-) {
+)
+{
     glGenTextures(1, &t_tex->m_tex_id);
     glBindTexture(GL_TEXTURE_2D, t_tex->m_tex_id);
 
@@ -272,20 +282,23 @@ int create_tex_from_buffer(
     return EXIT_SUCCESS;
 }
 
-int bind_tex(tex_t *t_tex) {
+int bind_tex(tex_t *t_tex)
+{
     glActiveTexture(t_tex->m_texture_unit);
     glBindTexture(GL_TEXTURE_2D, t_tex->m_tex_id);
 
     return 0;
 }
 
-int unbind_tex() {
+int unbind_tex()
+{
     glBindTexture(GL_TEXTURE_2D, 0);
 
     return EXIT_SUCCESS;
 }
 
-int delete_tex(tex_t *t_tex) {
+int delete_tex(tex_t *t_tex)
+{
     glDeleteTextures(1, &t_tex->m_tex_id);
 
     return EXIT_SUCCESS;

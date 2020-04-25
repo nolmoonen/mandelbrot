@@ -4,7 +4,8 @@
 /**
  * Converts a HSV color to a RGB one.
  */
-color_t HSVtoRGB(color_t hsv) {
+color_t HSVtoRGB(color_t hsv)
+{
     if (hsv.s) {
         // s != 0
         uint8_t region, remainder, p, q, t;

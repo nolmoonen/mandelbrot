@@ -6,8 +6,7 @@
       <file path="$PROJECT_DIR$/src" />
     </sourceRoots>
     <excludeRoots>
-      <file path="$PROJECT_DIR$/glfw" />
-      <file path="$PROJECT_DIR$/third-party" />
+      <file path="$PROJECT_DIR$/external" />
     </excludeRoots>
   </component>
   <component name="JavaScriptSettings">

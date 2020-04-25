@@ -21,11 +21,20 @@ double get_xoffset();
 double get_yoffset();
 
 /** mouse inputs */
-// fixme directly accessed for now
-bool right_pressed;
+bool left_pressed;
 bool middle_pressed;
+bool right_pressed;
+
+bool is_left_pressed();
+
+bool is_middle_pressed();
+
+bool is_right_pressed();
 
 /** cursor position */
+double xpos;
+double ypos;
+
 double last_xpos;
 double last_ypos;
 
@@ -33,6 +42,10 @@ double offset_xpos;
 double offset_ypos;
 
 int set_cursor_position(double t_xpos, double t_ypos);
+
+double get_xpos();
+
+double get_ypos();
 
 double get_offset_xpos();
 
@@ -43,6 +56,8 @@ bool w_down;
 bool a_down;
 bool s_down;
 bool d_down;
+bool esc_down; // escape
+bool bs_down; // backspace
 
 int set_w_down(bool t_down);
 
@@ -52,6 +67,10 @@ int set_s_down(bool t_down);
 
 int set_d_down(bool t_down);
 
+void set_esc_down(bool p_down);
+
+void set_bs_down(bool p_down);
+
 bool is_w_down();
 
 bool is_a_down();
@@ -59,5 +78,9 @@ bool is_a_down();
 bool is_s_down();
 
 bool is_d_down();
+
+bool is_esc_down();
+
+bool is_bs_down();
 
 #endif //BOMBER_INPUT_H

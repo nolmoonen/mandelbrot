@@ -3,7 +3,8 @@
 #include "shader_manager.h"
 #include <util/log.h>
 
-int initialize_shader_manager() {
+int initialize_shader_manager()
+{
     create_clist(
             &shader_list, SHADER_COUNT, sizeof(shader_program_t),
             (int (*)(void *, uint32_t)) create_program_from_resource,
@@ -13,13 +14,15 @@ int initialize_shader_manager() {
     return EXIT_SUCCESS;
 }
 
-int cleanup_shader_manager() {
+int cleanup_shader_manager()
+{
     delete_clist(&shader_list);
 
     return EXIT_SUCCESS;
 }
 
-int create_program_from_resource(shader_program_t *t_program, uint32_t t_prog_id) {
+int create_program_from_resource(shader_program_t *t_program, uint32_t t_prog_id)
+{
     // find index of program shader
     int32_t prog_index = -1;
     for (uint32_t i = 0; i < sizeof(SHADER_PROGRAM_RESOURCES) / sizeof(shader_res_t); i++) {
@@ -49,7 +52,8 @@ int create_program_from_resource(shader_program_t *t_program, uint32_t t_prog_id
     return EXIT_SUCCESS;
 }
 
-int delete_program_from_resource(shader_program_t *t_program, uint32_t t_prog_id) {
+int delete_program_from_resource(shader_program_t *t_program, uint32_t t_prog_id)
+{
     delete_shader_program(t_program);
 
     nm_log(LOG_INFO, "deleted shader program with id \"%d\"\n", t_prog_id);
@@ -57,7 +61,8 @@ int delete_program_from_resource(shader_program_t *t_program, uint32_t t_prog_id
     return EXIT_SUCCESS;
 }
 
-int request_program(shader_program_t *t_program, uint32_t t_prog_id) {
+int request_program(shader_program_t *t_program, uint32_t t_prog_id)
+{
     if (get_clist(&shader_list, (void *) t_program, t_prog_id) == EXIT_FAILURE) {
         nm_log(LOG_ERROR, "could not request texture \"%d\"\n", t_prog_id);
 
