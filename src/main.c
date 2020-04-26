@@ -160,8 +160,8 @@ int main(int argc, char **argv)
     initialize_shader_manager();
 
     // create selection texture from one blue pixel
-    uint8_t select_pixel[] = {51, 153, 255};
-    create_tex_from_buffer(&m_select_tex, select_pixel, 1, 1, GL_TEXTURE0, 3);
+    uint8_t select_pixel[] = {51, 153, 255, 100};
+    create_tex_from_buffer(&m_select_tex, select_pixel, 1, 1, GL_TEXTURE0, 4);
 
     // thread handle for the compute thread
     pthread_t compute_thread;
@@ -244,15 +244,15 @@ void render()
 {
     screen_clear();
 
+    mat4x4 identity;
+    mat4x4_identity(identity);
+    render_ortho_tex_quad(&m_quad, &m_tex, identity);
+
     if (selecting) {
         mat4x4 selection_matrix;
         create_selection_matrix(selection_matrix);
         render_ortho_tex_quad(&m_quad, &m_select_tex, selection_matrix);
     }
-
-    mat4x4 identity;
-    mat4x4_identity(identity);
-    render_ortho_tex_quad(&m_quad, &m_tex, identity);
 }
 
 void update()
@@ -284,8 +284,7 @@ void update()
     }
 
     // backspace zooms out
-    // todo maybe test for key up event
-    if (is_bs_down()) {
+    if (is_bs_up()) {
         nm_log(LOG_TRACE, "zooming out\n");
         pthread_mutex_lock(&state_mutex);
         {
@@ -299,92 +298,91 @@ void update()
         pthread_mutex_unlock(&state_mutex);
     }
 
-    // cancel selection (were selecting, right mouse button is pressed)
-    if (selecting && is_right_pressed()) {
-        nm_log(LOG_TRACE, "cancelled selection\n");
-        selecting = false;
+    if (selecting) {
+        if (is_right_pressed()) {
+            // cancel selection (were selecting, right mouse button is pressed)
+            nm_log(LOG_TRACE, "cancelled selection\n");
+            selecting = false;
+        } else if (is_left_released()) {
+            // confirm selection (were selecting, left mouse button is released)
+            nm_log(LOG_TRACE, "confirmed selection\n");
+            pthread_mutex_lock(&state_mutex);
+            {
+                if (m_state.fractal_stack_pointer == MAX_LEVELS - 1) {
+                    fprintf(stdout, "maximum depth reached!\n");
+                } else {
+                    if (selecting) { // to allow for canceling selection
+                        uint32_t w = get_window_width();
+                        uint32_t h = get_window_height();
+
+                        // obtain new ypos based on aspect ratio rather than real ypos
+                        float ypos_scaled =
+                                (float) clicked_ypos + ((float) (xpos - clicked_xpos) / w) * h;
+
+                        volatile Fractal *curr_fractal = &m_state.fractal_stack[m_state.fractal_stack_pointer];
+
+                        double re_diff = curr_fractal->re_end - curr_fractal->re_start;
+                        double im_diff = curr_fractal->im_end - curr_fractal->im_start;
+
+                        // new fractal definition
+                        Fractal next_fractal = {
+                                .re_start = curr_fractal->re_start + (clicked_xpos / w) * re_diff,
+                                .re_end =curr_fractal->re_end - ((w - xpos) / w) * re_diff,
+                                .im_start =curr_fractal->im_start + (clicked_ypos / h) * im_diff,
+                                .im_end = curr_fractal->im_end - ((h - ypos) / h) * im_diff,
+                        };
+
+                        // add to next position on stack
+                        m_state.fractal_stack[++m_state.fractal_stack_pointer] = next_fractal;
+
+                        // reset the max iterations
+                        m_state.max_iterations = INITIAL_MAX_ITER;
+                    }
+                }
+            }
+            pthread_mutex_unlock(&state_mutex);
+
+            selecting = false;
+        }
+    } else { // if (!selecting)
+        if (is_left_pressed()) {
+            nm_log(LOG_TRACE, "starting to select\n");
+            // start selecting
+            clicked_xpos = get_xpos();
+            clicked_ypos = get_ypos();
+
+            selecting = true;
+        }
     }
 
-    // confirm selection (were selecting, left mouse button is released)
-    if (selecting && !is_left_pressed()) {
-        nm_log(LOG_TRACE, "confirmed selection\n");
+    // update state
+    if (m_resized) {
+        nm_log(LOG_TRACE, "resized\n");
+        uint32_t w = get_window_width();
+        uint32_t h = get_window_height();
         pthread_mutex_lock(&state_mutex);
         {
-            if (m_state.fractal_stack_pointer == MAX_LEVELS - 1) {
-                fprintf(stdout, "maximum depth reached!\n");
+            // reset max iterations
+            m_state.max_iterations = INITIAL_MAX_ITER;
+
+            // clear the stack and reset pointer
+            m_state.fractal_stack_pointer = 0;
+
+            // set the start coordinates based on new resolution
+            m_state.fractal_stack[0] = FRACTAL_START;
+            float new_res = w / (float) h;
+            if (new_res < RESOLUTION) { // new height is larger, so scale height parameters up
+                m_state.fractal_stack[0].im_start *= (RESOLUTION / new_res);
+                m_state.fractal_stack[0].im_end *= (RESOLUTION / new_res);
+            } else if (new_res > RESOLUTION) { // new width is larger, so scale width parameters up
+                m_state.fractal_stack[0].re_start *= (new_res / RESOLUTION);
+                m_state.fractal_stack[0].re_end *= (new_res / RESOLUTION);
             } else {
-                if (selecting) { // to allow for canceling selection
-                    uint32_t w = get_window_width();
-                    uint32_t h = get_window_height();
-
-                    // obtain new ypos based on aspect ratio rather than real ypos
-                    float ypos_scaled =
-                            (float) clicked_ypos + ((float) (xpos - clicked_xpos) / w) * h;
-
-                    volatile Fractal *curr_fractal = &m_state.fractal_stack[m_state.fractal_stack_pointer];
-
-                    double re_diff = curr_fractal->re_end - curr_fractal->re_start;
-                    double im_diff = curr_fractal->im_end - curr_fractal->im_start;
-
-                    // new fractal definition
-                    Fractal next_fractal = {
-                            .re_start = curr_fractal->re_start + (clicked_xpos / w) * re_diff,
-                            .re_end =curr_fractal->re_end - ((w - xpos) / w) * re_diff,
-                            .im_start =curr_fractal->im_start + (clicked_ypos / h) * im_diff,
-                            .im_end = curr_fractal->im_end - ((h - ypos) / h) * im_diff,
-                    };
-
-                    // add to next position on stack
-                    m_state.fractal_stack[++m_state.fractal_stack_pointer] = next_fractal;
-
-                    // reset the max iterations
-                    m_state.max_iterations = INITIAL_MAX_ITER;
-                }
+                // resolution is exactly the same, and FRACTAL_START is appropriate
             }
         }
         pthread_mutex_unlock(&state_mutex);
 
-        selecting = false;
-    }
-
-    // start selecting
-    if (!selecting && is_left_pressed()) {
-        clicked_xpos = get_xpos();
-        clicked_ypos = get_ypos();
-
-        selecting = true;
+        glViewport(0, 0, w, h);
     }
 }
-
-//static void framebuffer_resize_callback(GLFWwindow *p_window, int p_width, int p_height) {
-//    // update state
-//    pthread_mutex_lock(&state_mutex);
-//    {
-//        // set new dimensions
-//        m_state.screen_width = p_width;
-//        m_state.screen_height = p_height;
-//
-//        // reset max iterations
-//        m_state.max_iterations = INITIAL_MAX_ITER;
-//
-//        // clear the stack and reset pointer
-//        m_state.fractal_stack_pointer = 0;
-//
-//        // set the start coordinates based on new resolution
-//        m_state.fractal_stack[0] = FRACTAL_START;
-//        double new_res = p_width / (double) p_height;
-//        if (new_res < RESOLUTION) { // new height is larger, so scale height parameters up
-//            m_state.fractal_stack[0].im_start *= (RESOLUTION / new_res);
-//            m_state.fractal_stack[0].im_end *= (RESOLUTION / new_res);
-//        } else if (new_res > RESOLUTION) { // new width is larger, so scale width parameters up
-//            m_state.fractal_stack[0].re_start *= (new_res / RESOLUTION);
-//            m_state.fractal_stack[0].re_end *= (new_res / RESOLUTION);
-//        } else {
-//            // resolution is exactly the same, and FRACTAL_START is appropriate
-//        }
-//    }
-//    pthread_mutex_unlock(&state_mutex);
-//
-//    // let vulkan know to rebuild swap chain
-//    framebufferResized = true;
-//}

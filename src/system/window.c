@@ -15,8 +15,8 @@ int init_window()
         goto err_glfw;
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
     if ((m_window = glfwCreateWindow(INITIAL_WIDTH, INITIAL_HEIGHT, "", NULL, NULL)) == NULL) {
         nm_log(LOG_ERROR, "failed to create window or OpenGl context\n");
@@ -41,7 +41,12 @@ int init_window()
 
     glfwSwapInterval(1);
 
-    glEnable(GL_DEPTH_TEST);
+    // todo 3d/2d param?
+//    glEnable(GL_DEPTH_TEST);
+
+    // Enable blending
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glClearColor(0.0f, 0.1f, 0.2f, 1.0f);
 
@@ -96,13 +101,19 @@ void error_callback(int t_error, const char *t_description)
 
 void key_callback(GLFWwindow *t_window, int t_key, int t_scancode, int t_action, int t_mods)
 {
+    // per documentation: "The action is one of GLFW_PRESS, GLFW_REPEAT or GLFW_RELEASE."
+    // it is sufficient to use (t_action == GLFW_PRESS || t_action == GLFW_REPEAT)
+    // since a GLFW_RELEASE action always follows
     switch (t_key) {
         case GLFW_KEY_ESCAPE:
             set_esc_down(t_action == GLFW_PRESS || t_action == GLFW_REPEAT);
             break;
-        case GLFW_KEY_BACKSPACE :
-            set_bs_down(t_action == GLFW_PRESS || t_action == GLFW_REPEAT);
+        case GLFW_KEY_BACKSPACE: {
+            bool down = t_action == GLFW_PRESS || t_action == GLFW_REPEAT;
+            set_bs_down(down);
+            set_bs_up(!down);
             break;
+        }
         case GLFW_KEY_W:
             set_w_down(t_action == GLFW_PRESS || t_action == GLFW_REPEAT);
             break;
@@ -130,13 +141,25 @@ void mouse_button_callback(GLFWwindow *t_window, int t_button, int t_action, int
     // per documentation: "The action is one of GLFW_PRESS or GLFW_RELEASE."
     switch (t_button) {
         case GLFW_MOUSE_BUTTON_LEFT:
-            left_pressed = t_action == GLFW_PRESS;
+            if (t_action == GLFW_PRESS) {
+                set_left_pressed(true);
+            } else if (t_action == GLFW_RELEASE) {
+                set_left_released(true);
+            }
             break;
         case GLFW_MOUSE_BUTTON_MIDDLE:
-            middle_pressed = t_action == GLFW_PRESS;
+            if (t_action == GLFW_PRESS) {
+                set_middle_pressed(true);
+            } else if (t_action == GLFW_RELEASE) {
+                set_middle_released(true);
+            }
             break;
         case GLFW_MOUSE_BUTTON_RIGHT:
-            right_pressed = t_action == GLFW_PRESS;
+            if (t_action == GLFW_PRESS) {
+                set_right_pressed(true);
+            } else if (t_action == GLFW_RELEASE) {
+                set_right_released(true);
+            }
             break;
         default:
             break;
@@ -150,7 +173,9 @@ void cursor_position_callback(GLFWwindow *t_window, double t_xpos, double t_ypos
 
 void framebuffer_size_callback(GLFWwindow *t_window, int t_width, int t_height)
 {
-    glViewport(0, 0, t_width, t_height);
+    m_window_width = t_width;
+    m_window_height = t_height;
+    set_resized(true);
 }
 
 uint32_t get_window_width()

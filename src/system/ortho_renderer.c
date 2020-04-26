@@ -4,9 +4,11 @@
 #include "ortho_renderer.h"
 #include "shader_manager.h"
 
+// todo move to window?
 int screen_clear()
 {
-    glClear((uint32_t) GL_COLOR_BUFFER_BIT | (uint32_t) GL_DEPTH_BUFFER_BIT);
+//    glClear((uint32_t) GL_COLOR_BUFFER_BIT | (uint32_t) GL_DEPTH_BUFFER_BIT);
+    glClear((uint32_t) GL_COLOR_BUFFER_BIT);
 
     return EXIT_SUCCESS;
 }
