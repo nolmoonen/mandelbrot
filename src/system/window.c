@@ -1,3 +1,4 @@
+// nolmoonen v1.0.0
 #include <stdlib.h>
 #include <stdbool.h>
 #include <glad/glad.h>
@@ -6,8 +7,10 @@
 #include "util/log.h"
 #include "input.h"
 
-int init_window()
+int init_window(bool p_ortho)
 {
+    m_ortho = p_ortho;
+
     glfwSetErrorCallback(error_callback);
 
     if (glfwInit() == GLFW_FALSE) {
@@ -41,8 +44,10 @@ int init_window()
 
     glfwSwapInterval(1);
 
-    // todo 3d/2d param?
-//    glEnable(GL_DEPTH_TEST);
+    // 2d/3d specific initialization
+    if (!m_ortho) {
+        glEnable(GL_DEPTH_TEST);
+    }
 
     // Enable blending
     glEnable(GL_BLEND);
@@ -52,6 +57,7 @@ int init_window()
 
     return EXIT_SUCCESS;
 
+    // unusual exit cleanup procedure
     err_glad:
     glfwDestroyWindow(m_window);
     err_window:
@@ -85,6 +91,17 @@ int swap_window_buffers()
     glfwSwapBuffers(m_window);
 
     return EXIT_SUCCESS;
+}
+
+void clear_window()
+{
+    GLbitfield mask = GL_COLOR_BUFFER_BIT;
+
+    if (!m_ortho) {
+        mask |= (GLbitfield) GL_DEPTH_BUFFER_BIT;
+    }
+
+    glClear(mask);
 }
 
 int set_window_title(const char *t_title)

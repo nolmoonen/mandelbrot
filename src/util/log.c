@@ -1,4 +1,4 @@
-// Nol Moonen v1.0.0
+// nolmoonen v1.0.0
 #include <stdarg.h>
 #include <stdio.h>
 

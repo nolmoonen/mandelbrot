@@ -1,10 +1,11 @@
+// nolmoonen v1.0.0
 #define STB_IMAGE_IMPLEMENTATION
 
 #include <stb_image.h>
-
 #include <stdlib.h>
 #include "opengl.h"
 #include "util/log.h"
+#include "shader_manager.h"
 
 int create_shader_program(
         shader_program_t *t_shader_program,
@@ -154,34 +155,16 @@ int set_mat4x4(shader_program_t *t_shader_program, const char *t_name, mat4x4 t_
     return EXIT_SUCCESS;
 }
 
-// todo: collapse these functions
-int create_tex_from_file(tex_t *t_tex, const char *t_tex_file, GLenum t_texture_unit)
+int create_tex_from_file_on_disk(
+        tex_t *t_tex, GLenum t_texture_unit,
+        const char *t_tex_file
+)
 {
-    glGenTextures(1, &t_tex->m_tex_id);
-    glBindTexture(GL_TEXTURE_2D, t_tex->m_tex_id);
-
-    // set the texture wrapping/filtering options (on the currently bound texture object)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    // load and generate the texture
+    // load and generate the texture from file
     int width, height, channel_count;
     unsigned char *data = stbi_load(t_tex_file, &width, &height, &channel_count, 0);
     if (data) {
-        GLenum format;
-        if (channel_count == 3) {
-            format = GL_RGB;
-        } else if (channel_count == 4) {
-            format = GL_RGBA;
-        } else {
-            nm_log(LOG_WARN, "unknown texture format, guessing GL_RGBA\n");
-            format = GL_RGBA;
-        }
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
+        create_tex_from_mem(t_tex, t_texture_unit, data, width, height, channel_count);
     } else {
         nm_log(LOG_ERROR, "failed to load texture: %s\n", t_tex_file);
         stbi_image_free(data);
@@ -191,16 +174,42 @@ int create_tex_from_file(tex_t *t_tex, const char *t_tex_file, GLenum t_texture_
 
     stbi_image_free(data);
 
-    t_tex->m_texture_unit = t_texture_unit;
+    return EXIT_SUCCESS;
+}
 
-    glBindTexture(GL_TEXTURE_2D, 0);
+int create_tex_from_file_on_mem(
+        tex_t *t_tex, GLenum t_texture_unit,
+        const unsigned char *t_tex_data, size_t t_tex_len, uint32_t t_channel_count
+)
+{
+    // load and generate the texture from data buffer
+    int width, height, channel_count;
+    unsigned char *data = stbi_load_from_memory(
+            (const unsigned char *) t_tex_data,
+            t_tex_len, &width, &height, &channel_count, t_channel_count
+    );
+
+    if (channel_count != t_channel_count) {
+        nm_log(LOG_WARN, "given channel count not equal to detected channel count\n");
+    }
+
+    if (data) {
+        create_tex_from_mem(t_tex, t_texture_unit, data, width, height, channel_count);
+    } else {
+        nm_log(LOG_ERROR, "failed to load texture\n");
+        stbi_image_free(data);
+
+        return EXIT_FAILURE;
+    }
+
+    stbi_image_free(data);
 
     return EXIT_SUCCESS;
 }
 
 int create_tex_from_mem(
-        tex_t *t_tex, const char *t_tex_data, size_t t_tex_len, GLenum t_texture_unit,
-        uint32_t t_channel_count
+        tex_t *t_tex, GLenum t_texture_unit,
+        const unsigned char *t_tex_data, uint32_t width, uint32_t height, uint32_t t_channel_count
 )
 {
     glGenTextures(1, &t_tex->m_tex_id);
@@ -211,51 +220,6 @@ int create_tex_from_mem(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    // load and generate the texture
-    int width, height, channel_count;
-    unsigned char *data = stbi_load_from_memory(
-            (const unsigned char *) t_tex_data,
-            t_tex_len, &width, &height, &channel_count, t_channel_count
-    );
-
-    if (data) {
-        GLenum format;
-        if (channel_count == 3) {
-            format = GL_RGB;
-        } else if (channel_count == 4) {
-            format = GL_RGBA;
-        } else {
-            nm_log(LOG_WARN, "unknown texture format, guessing GL_RGBA\n");
-            format = GL_RGBA;
-        }
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    } else {
-        nm_log(LOG_ERROR, "failed to load texture\n");
-        stbi_image_free(data);
-
-        return EXIT_FAILURE;
-    }
-
-    stbi_image_free(data);
-
-    t_tex->m_texture_unit = t_texture_unit;
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    return EXIT_SUCCESS;
-}
-
-int create_tex_from_buffer(
-        tex_t *t_tex, const char *t_tex_data, uint32_t width, uint32_t height, GLenum t_texture_unit,
-        uint32_t t_channel_count
-)
-{
-    glGenTextures(1, &t_tex->m_tex_id);
-    glBindTexture(GL_TEXTURE_2D, t_tex->m_tex_id);
-
 
     GLenum format;
     if (t_channel_count == 3) {
@@ -267,15 +231,8 @@ int create_tex_from_buffer(
         format = GL_RGBA;
     }
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, t_tex_data);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, t_tex_data);
     glGenerateMipmap(GL_TEXTURE_2D);
-
-
-    // set the texture wrapping/filtering options (on the currently bound texture object)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     t_tex->m_texture_unit = t_texture_unit;
 
@@ -302,6 +259,87 @@ int unbind_tex()
 int delete_tex(tex_t *t_tex)
 {
     glDeleteTextures(1, &t_tex->m_tex_id);
+
+    return EXIT_SUCCESS;
+}
+
+const GLfloat QUAD_POS[] = {
+        -1.0f, 1.0f,
+        1.0f, -1.0f,
+        -1.0f, -1.0f,
+
+        -1.0f, 1.0f,
+        1.0f, 1.0f,
+        1.0f, -1.0f
+};
+
+const GLfloat QUAD_TEX[] = {
+        0.0f, 1.0f,
+        1.0f, 0.0f,
+        0.0f, 0.0f,
+
+        0.0f, 1.0f,
+        1.0f, 1.0f,
+        1.0f, 0.0f
+};
+
+int create_quad(quad *p_quad)
+{
+    // create VAO
+    glGenVertexArrays(1, &p_quad->vao);
+    glBindVertexArray(p_quad->vao);
+
+    // create geometric vertex VBO
+    glGenBuffers(1, &p_quad->vbo_pos);
+    glBindBuffer(GL_ARRAY_BUFFER, p_quad->vbo_pos);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD_POS), QUAD_POS, GL_STATIC_DRAW);
+    // index = 0, size = 2
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (GLvoid *) 0);
+
+    // create texture vertex VBO
+    glGenBuffers(1, &p_quad->vbo_tex);
+    glBindBuffer(GL_ARRAY_BUFFER, p_quad->vbo_tex);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD_TEX), QUAD_TEX, GL_STATIC_DRAW);
+    // index = 1, size = 2
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (GLvoid *) 0);
+
+    glBindVertexArray(0);
+
+    return EXIT_SUCCESS;
+}
+
+int delete_quad(quad *p_quad)
+{
+    glDeleteBuffers(1, &p_quad->vbo_tex);
+    glDeleteBuffers(1, &p_quad->vbo_pos);
+    glDeleteVertexArrays(1, &p_quad->vao);
+
+    return 0;
+}
+
+
+int render_ortho_tex_quad(quad *p_quad, tex_t *p_tex, mat4x4 p_model)
+{
+    // obtain the shader program from id, and use it
+    shader_program_t shader_program;
+    request_program(&shader_program, SHADER_DEFAULT);
+    use_shader_program(&shader_program);
+
+    set_mat4x4(&shader_program, "modelMatrix", p_model);
+
+    // obtain the texture from id, and bind the texture
+    bind_tex(p_tex);
+
+    // draw the quad
+    glBindVertexArray(p_quad->vao);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    // unbind shader and texture
+    unbind_tex();
+    unuse_shader_program();
 
     return EXIT_SUCCESS;
 }

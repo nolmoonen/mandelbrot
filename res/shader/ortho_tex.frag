@@ -1,5 +1,4 @@
-// fragment shader
-// use with: 'default.vert'
+// fragment shader, use with: 'ortho_tex.vert'
 #version 330 core
 
 uniform sampler2D tex_sampler;

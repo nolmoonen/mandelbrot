@@ -9,9 +9,11 @@ file(GLOB_RECURSE HEADERS ${PROJECT_SOURCE_DIR}/src/*.h)
 
 # resource files
 add_executable(embedfile embedfile.c)
-add_custom_command(OUTPUT default_frag.c COMMAND embedfile default_frag ../res/shader/default.frag DEPENDS res/shader/default.frag)
-add_custom_command(OUTPUT default_vert.c COMMAND embedfile default_vert ../res/shader/default.vert DEPENDS res/shader/default.vert)
-set(RESOURCES default_frag.c default_vert.c)
+add_custom_command(OUTPUT ortho_tex_frag.c
+        COMMAND embedfile ortho_tex_frag ../res/shader/ortho_tex.frag DEPENDS res/shader/ortho_tex.frag)
+add_custom_command(OUTPUT ortho_tex_vert.c
+        COMMAND embedfile ortho_tex_vert ../res/shader/ortho_tex.vert DEPENDS res/shader/ortho_tex.vert)
+set(RESOURCES ortho_tex_frag.c ortho_tex_vert.c)
 
 add_executable(${CMAKE_PROJECT_NAME} ${SOURCES} ${HEADERS} ${RESOURCES})
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/third-party)
@@ -35,8 +37,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/ex
 # include linmath
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/external/linmath)
 
-# link pthreads
-# https://stackoverflow.com/questions/1620918/cmake-and-libpthread
-set(THREADS_PREFER_PTHREAD_FLAG ON)
+# statically link pthreads (https://stackoverflow.com/questions/1620918/cmake-and-libpthread)
+set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
-target_link_libraries(mandelbrot Threads::Threads)
+target_link_libraries(${CMAKE_PROJECT_NAME} Threads::Threads -static)

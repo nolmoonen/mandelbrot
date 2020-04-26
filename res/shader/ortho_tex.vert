@@ -1,5 +1,4 @@
-// vertex shader
-// use with: 'default.frag'
+// vertex shader, use with 'ortho_tex.frag'
 #version 330 core
 
 uniform mat4 modelMatrix;

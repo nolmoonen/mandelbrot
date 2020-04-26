@@ -1,5 +1,6 @@
-#ifndef BOMBER_WINDOW_H
-#define BOMBER_WINDOW_H
+// nolmoonen v1.0.0
+#ifndef NM_WINDOW_H
+#define NM_WINDOW_H
 
 #include <stdint.h>
 #include <GLFW/glfw3.h>
@@ -12,8 +13,10 @@ static const uint32_t INITIAL_HEIGHT = 600;
 uint32_t m_window_width;
 uint32_t m_window_height;
 
-/** Call to {@link cleanup_window} is required if EXIT_SUCCESS is returned. */
-int init_window();
+bool m_ortho; // whether the window is initialized in orthographic mode
+
+/** Call to {cleanup_window} is required if EXIT_SUCCESS is returned. */
+int init_window(bool p_ortho);
 
 int cleanup_window();
 
@@ -23,6 +26,8 @@ void set_window_to_close();
 
 int swap_window_buffers();
 
+void clear_window();
+
 /** {@param t_title} needs to be null-terminated */
 int set_window_title(const char *t_title);
 
@@ -30,9 +35,7 @@ uint32_t get_window_width();
 
 uint32_t get_window_height();
 
-/**
- * Begin GLFW callbacks.
- */
+/** Begin GLFW callbacks. */
 
 void error_callback(int t_error, const char *t_description);
 
@@ -46,8 +49,6 @@ static void cursor_position_callback(GLFWwindow *t_window, double t_xpos, double
 
 void framebuffer_size_callback(GLFWwindow *t_window, int t_width, int t_height);
 
-/**
- * End GLFW callbacks.
- */
+/** End GLFW callbacks. */
 
-#endif //BOMBER_WINDOW_H
+#endif //NM_WINDOW_H

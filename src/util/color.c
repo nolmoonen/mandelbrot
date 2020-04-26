@@ -1,9 +1,6 @@
 #include <stdint.h>
 #include "color.h"
 
-/**
- * Converts a HSV color to a RGB one.
- */
 color_t HSVtoRGB(color_t hsv)
 {
     if (hsv.s) {

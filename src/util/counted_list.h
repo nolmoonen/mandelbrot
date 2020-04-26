@@ -1,4 +1,4 @@
-// Nol Moonen v1.0.0
+// nolmoonen v1.0.0
 #ifndef NM_COUNTED_LIST_H
 #define NM_COUNTED_LIST_H
 

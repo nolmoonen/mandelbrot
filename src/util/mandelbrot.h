@@ -28,14 +28,10 @@ typedef struct Texture {
     uint32_t height;
 } Texture;
 
-/**
- * Calculates a HSV color based on iterations.
- */
+/** Calculates a HSV color based on iterations. */
 color_t color(double m, double *hues, uint32_t max_iterations);
 
-/**
- * Calculates iterations to converge, given a complex number.
- */
+/** Calculates iterations to converge, given a complex number. */
 double mandelbrot(complex_t c, uint32_t max_iterations);
 
 void generate(Texture *p_texture, Fractal p_fractal, uint32_t p_max_iterations);

@@ -1,5 +1,5 @@
+// nolmoonen v1.0.0
 #include <stdlib.h>
-
 #include "shader_manager.h"
 #include <util/log.h>
 

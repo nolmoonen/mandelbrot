@@ -1,5 +1,5 @@
-#ifndef BOMBER_INPUT_H
-#define BOMBER_INPUT_H
+#ifndef NM_INPUT_H
+#define NM_INPUT_H
 
 #include <stdbool.h>
 
@@ -120,4 +120,4 @@ void set_resized(bool p_resized);
 
 bool is_resized();
 
-#endif //BOMBER_INPUT_H
+#endif //NM_INPUT_H

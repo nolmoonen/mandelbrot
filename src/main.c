@@ -1,5 +1,4 @@
 #include <glad/glad.h>
-
 #include <stdio.h>
 #include <stdint.h>
 #include <inttypes.h>
@@ -10,7 +9,6 @@
 #include <util/log.h>
 #include <system/input.h>
 #include <system/window.h>
-#include <system/ortho_renderer.h>
 #include <system/shader_manager.h>
 #include <util/util.h>
 #include <util/mandelbrot.h>
@@ -63,8 +61,9 @@ void create_selection_matrix(mat4x4 p_selection_matrix)
 {
     uint32_t w = get_window_width();
     uint32_t h = get_window_height();
-    int32_t selected_size_width = xpos - clicked_xpos;
-    int32_t selected_size_height = ypos - clicked_ypos;
+    float selected_size_width = (float) (xpos - clicked_xpos);
+    // height is scaled from horizontal positions to maintain window aspect ratio
+    float selected_size_height = (selected_size_width / (float) w) * h;
 
     mat4x4_identity(p_selection_matrix);
 
@@ -140,8 +139,10 @@ void *compute_function(void *vargp)
     return NULL;
 }
 
+/** Updates the state of the program by using the input handler. */
 void update();
 
+/** Renders both quads. */
 void render();
 
 int main(int argc, char **argv)
@@ -150,7 +151,7 @@ int main(int argc, char **argv)
 
     init_input();
 
-    if (init_window() == EXIT_FAILURE) {
+    if (init_window(true) == EXIT_FAILURE) {
         nm_log(LOG_ERROR, "failed to initialize window\n");
         return EXIT_FAILURE;
     }
@@ -161,7 +162,7 @@ int main(int argc, char **argv)
 
     // create selection texture from one blue pixel
     uint8_t select_pixel[] = {51, 153, 255, 100};
-    create_tex_from_buffer(&m_select_tex, select_pixel, 1, 1, GL_TEXTURE0, 4);
+    create_tex_from_mem(&m_select_tex, GL_TEXTURE0, select_pixel, 1, 1, 4);
 
     // thread handle for the compute thread
     pthread_t compute_thread;
@@ -235,19 +236,22 @@ int main(int argc, char **argv)
     // free allocated memory
     free(texture_local.data);
 
+    cleanup_shader_manager();
     delete_quad(&m_quad);
-
     cleanup_input();
 }
 
 void render()
 {
-    screen_clear();
+    clear_window();
 
+    // draw the fractal quad
     mat4x4 identity;
     mat4x4_identity(identity);
+    mat4x4_scale_aniso(identity, identity, 1.f, -1.f, 1.f);
     render_ortho_tex_quad(&m_quad, &m_tex, identity);
 
+    // draw the selection quad (if selecting)
     if (selecting) {
         mat4x4 selection_matrix;
         create_selection_matrix(selection_matrix);
@@ -266,8 +270,8 @@ void update()
             // replace the texture for the computed one
             nm_log(LOG_INFO, "replacing texture\n");
             delete_tex(&m_tex);
-            create_tex_from_buffer(
-                    &m_tex, texture_local.data, texture_local.width, texture_local.height, GL_TEXTURE0, 4
+            create_tex_from_mem(
+                    &m_tex, GL_TEXTURE0, texture_local.data, texture_local.width, texture_local.height, 4
             );
 
             // signal compute thread that pipeline has been recreated
@@ -321,15 +325,15 @@ void update()
 
                         volatile Fractal *curr_fractal = &m_state.fractal_stack[m_state.fractal_stack_pointer];
 
-                        double re_diff = curr_fractal->re_end - curr_fractal->re_start;
-                        double im_diff = curr_fractal->im_end - curr_fractal->im_start;
+                        double re_size = curr_fractal->re_end - curr_fractal->re_start;
+                        double im_size = curr_fractal->im_end - curr_fractal->im_start;
 
                         // new fractal definition
                         Fractal next_fractal = {
-                                .re_start = curr_fractal->re_start + (clicked_xpos / w) * re_diff,
-                                .re_end =curr_fractal->re_end - ((w - xpos) / w) * re_diff,
-                                .im_start =curr_fractal->im_start + (clicked_ypos / h) * im_diff,
-                                .im_end = curr_fractal->im_end - ((h - ypos) / h) * im_diff,
+                                .re_start = curr_fractal->re_start + (clicked_xpos / w) * re_size,
+                                .re_end =curr_fractal->re_end - ((w - xpos) / w) * re_size,
+                                .im_start =curr_fractal->im_start + (clicked_ypos / h) * im_size,
+                                .im_end = curr_fractal->im_end - ((h - ypos_scaled) / h) * im_size,
                         };
 
                         // add to next position on stack
