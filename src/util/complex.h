@@ -1,9 +1,7 @@
 #ifndef MANDELBROT_COMPLEX_H
 #define MANDELBROT_COMPLEX_H
 
-/**
- * Represents a complex number.
- */
+/** Represents a complex number. */
 typedef struct {
     double a; // real part
     double b; // imaginary part

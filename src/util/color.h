@@ -12,9 +12,7 @@ typedef struct {
     };
 } color_t;
 
-/**
- * Converts a HSV color to a RGB one.
- */
+/** Converts a HSV color to a RGB one. */
 color_t HSVtoRGB(color_t hsv);
 
 #endif //MANDELBROT_COLOR_H
