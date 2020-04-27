@@ -19,8 +19,7 @@
 * Press escape to close the application.
 * Press P to write the current texture to file `mandelbrot.png`.
 
-## Todo
+## Todo optional features
 * Preemption to compute thread in the case of resizing, zooming in/out, closing application.
 * Full screen mode (for saving 1920x1080 textures).
 * Color schemes.
-* Make logging thread-safe.

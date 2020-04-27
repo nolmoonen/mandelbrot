@@ -1,7 +1,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #include <stb_image_write.h>
-
+#include <util/log.h>
 #include <glad/glad.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -10,7 +10,6 @@
 #include <time.h>
 #include <pthread.h>
 #include <stdbool.h>
-#include <util/log.h>
 #include <system/input.h>
 #include <system/window.h>
 #include <system/shader_manager.h>
@@ -45,10 +44,9 @@ quad m_quad;        // quad that is used to render the fractal and selection on
 tex_t m_tex;        // texture for the fractal
 tex_t m_select_tex; // texture for the selection quad
 
-// protects m_state
-pthread_mutex_t state_mutex;
+pthread_mutex_t state_mutex;          // protects {m_state}
 // synchronizing behavior between compute and main thread
-pthread_mutex_t computing_done_mutex;
+pthread_mutex_t computing_done_mutex; // protects {texture_local}
 pthread_cond_t computing_done_cv;
 
 /** accessed by main thread only */
@@ -104,13 +102,14 @@ void *compute_function(void *vargp)
         // obtain data mutex and compute next texture
         pthread_mutex_lock(&computing_done_mutex);
         {
-            uint32_t texwidth, texheight, maxiter;
+            uint32_t texwidth, texheight, maxiter, depth;
             Fractal fractal;
             /** obtain the state mutex and copy the values needed to compute the next texture */
             pthread_mutex_lock(&state_mutex);
             {
                 texwidth = get_window_width();
                 texheight = get_window_height();
+                depth = m_state.fractal_stack_pointer;
                 fractal = m_state.fractal_stack[m_state.fractal_stack_pointer];
                 maxiter = m_state.max_iterations;
                 m_state.max_iterations += ITER_STEP;
@@ -129,6 +128,11 @@ void *compute_function(void *vargp)
                     // todo: exit thread due to fatal error, could not reallocate memory
                 }
             }
+
+            nm_log(
+                    LOG_TRACE, "starting to compute for size=%ux%u, max_iter=%u, depth=%u\n",
+                    texture_local.width, texture_local.height, maxiter, depth
+            );
 
             generate(&texture_local, fractal, maxiter);
 
@@ -151,7 +155,7 @@ void render();
 
 int main(int argc, char **argv)
 {
-    nm_log_level(LOG_TRACE);
+    nm_log_init(LOG_TRACE, true);
 
     init_input();
 
@@ -243,6 +247,7 @@ int main(int argc, char **argv)
     cleanup_shader_manager();
     delete_quad(&m_quad);
     cleanup_input();
+    nm_log_cleanup();
 }
 
 void render()
@@ -272,7 +277,6 @@ void update()
         pthread_mutex_lock(&computing_done_mutex);
         {
             // replace the texture for the computed one
-            nm_log(LOG_INFO, "replacing texture\n");
             delete_tex(&m_tex);
             create_tex_from_mem(
                     &m_tex, GL_TEXTURE0, texture_local.data, texture_local.width, texture_local.height, 3, 4
@@ -288,12 +292,17 @@ void update()
     /** update state from input*/
     // p dumps the texture to file
     if (get_key_state(KEY_P, PRESSED)) {
-        nm_log(LOG_TRACE, "dumping texture to file\n");
-        const uint32_t channels = 3;
-        stbi_write_png(
-                "mandelbrot.png", texture_local.width, texture_local.height, channels, texture_local.data,
-                (int32_t) (texture_local.width * channels)
-        );
+        // protects {texture_local}
+        pthread_mutex_lock(&computing_done_mutex);
+        {
+            nm_log(LOG_TRACE, "dumping texture to file\n");
+            const uint32_t channels = 3;
+            stbi_write_png(
+                    "mandelbrot.png", texture_local.width, texture_local.height, channels, texture_local.data,
+                    (int32_t) (texture_local.width * channels)
+            );
+        }
+        pthread_mutex_unlock(&computing_done_mutex);
     }
 
     // escape closes the window
