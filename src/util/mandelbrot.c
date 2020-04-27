@@ -88,7 +88,8 @@ void generate(volatile Texture *p_texture, Fractal p_fractal, uint32_t p_max_ite
             // create color, based on the number of iterations
             color_t rgb = color(all_iterations[y * p_texture->width + x], hues, p_max_iterations);
             memcpy(&p_texture->data[pixel_start], &rgb, sizeof(rgb));
-            pixel_start += sizeof(color_t);
+            p_texture->data[pixel_start + 3] = 255; // alpha value
+            pixel_start += sizeof(color_t) + 1;
         }
     }
 

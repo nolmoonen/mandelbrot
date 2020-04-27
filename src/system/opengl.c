@@ -164,7 +164,7 @@ int create_tex_from_file_on_disk(
     int width, height, channel_count;
     unsigned char *data = stbi_load(t_tex_file, &width, &height, &channel_count, 0);
     if (data) {
-        create_tex_from_mem(t_tex, t_texture_unit, data, width, height, channel_count, channel_count);
+        create_tex_from_mem(t_tex, t_texture_unit, data, width, height, channel_count);
     } else {
         nm_log(LOG_ERROR, "failed to load texture: %s\n", t_tex_file);
         stbi_image_free(data);
@@ -194,7 +194,7 @@ int create_tex_from_file_on_mem(
     }
 
     if (data) {
-        create_tex_from_mem(t_tex, t_texture_unit, data, width, height, channel_count, channel_count);
+        create_tex_from_mem(t_tex, t_texture_unit, data, width, height, channel_count);
     } else {
         nm_log(LOG_ERROR, "failed to load texture\n");
         stbi_image_free(data);
@@ -207,21 +207,9 @@ int create_tex_from_file_on_mem(
     return EXIT_SUCCESS;
 }
 
-GLenum channel_count_to_format(uint32_t t_channel_count) {
-    if (t_channel_count == 3) {
-        return GL_RGB;
-    } else if (t_channel_count == 4) {
-        return GL_RGBA;
-    } else {
-        nm_log(LOG_WARN, "unknown texture format, guessing GL_RGBA\n");
-        return GL_RGBA;
-    }
-}
-
 int create_tex_from_mem(
         tex_t *t_tex, GLenum t_texture_unit,
-        const unsigned char *t_tex_data, uint32_t width, uint32_t height,
-        uint32_t t_texture_channel_count, uint32_t t_data_channel_count
+        const unsigned char *t_tex_data, uint32_t width, uint32_t height, uint32_t t_channel_count
 )
 {
     glGenTextures(1, &t_tex->m_tex_id);
@@ -233,10 +221,17 @@ int create_tex_from_mem(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    GLenum tex_format = channel_count_to_format(t_texture_channel_count);
-    GLenum data_format = channel_count_to_format(t_data_channel_count);
+    GLenum format;
+    if (t_channel_count == 3) {
+        format = GL_RGB;
+    } else if (t_channel_count == 4) {
+        format = GL_RGBA;
+    } else {
+        nm_log(LOG_WARN, "unknown texture format, guessing GL_RGBA\n");
+        format = GL_RGBA;
+    }
 
-    glTexImage2D(GL_TEXTURE_2D, 0, tex_format, width, height, 0, data_format, GL_UNSIGNED_BYTE, t_tex_data);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, t_tex_data);
     glGenerateMipmap(GL_TEXTURE_2D);
 
     t_tex->m_texture_unit = t_texture_unit;

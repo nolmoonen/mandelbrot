@@ -124,7 +124,7 @@ void *compute_function(void *vargp)
 
                 // change the size of the allocated buffer
                 uint8_t *new_data = realloc(
-                        texture_local.data, sizeof(uint8_t) * texture_local.width * texture_local.height * 3
+                        texture_local.data, sizeof(uint8_t) * texture_local.width * texture_local.height * 4
                 );
                 if (new_data) {
                     texture_local.data = new_data;
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 
     // create selection texture from one blue pixel
     uint8_t select_pixel[] = {51, 153, 255, 100};
-    create_tex_from_mem(&m_select_tex, GL_TEXTURE0, select_pixel, 1, 1, 4, 4);
+    create_tex_from_mem(&m_select_tex, GL_TEXTURE0, select_pixel, 1, 1, 4);
 
     // thread handle for the compute thread
     pthread_t compute_thread;
@@ -220,15 +220,15 @@ int main(int argc, char **argv)
     m_state.fractal_stack[m_state.fractal_stack_pointer] = FRACTAL_START;
 
     // initialize synchronization variables
-    if (pthread_mutex_init(&state_mutex, NULL) != 0) nm_log(LOG_ERROR, "e\n");
-    if (pthread_mutex_init(&window_mutex, NULL) != 0) nm_log(LOG_ERROR, "e\n");
-    if (pthread_mutex_init(&computing_done_mutex, NULL) != 0) nm_log(LOG_ERROR, "e\n");
-    if (pthread_cond_init(&computing_done_cv, NULL) != 0) nm_log(LOG_ERROR, "e\n");
+    pthread_mutex_init(&state_mutex, NULL);
+    pthread_mutex_init(&window_mutex, NULL);
+    pthread_mutex_init(&computing_done_mutex, NULL);
+    pthread_cond_init(&computing_done_cv, NULL);
 
     // allocate texture
     texture_local.width = get_window_width();
     texture_local.height = get_window_height();
-    texture_local.data = malloc(sizeof(uint8_t) * get_window_width() * get_window_height() * 3);
+    texture_local.data = malloc(sizeof(uint8_t) * get_window_width() * get_window_height() * 4);
 
     // create the compute thread
     pthread_create(&compute_thread, NULL, compute_function, NULL);
@@ -323,9 +323,7 @@ void update()
         {
             // replace the texture for the computed one
             delete_tex(&m_tex);
-            create_tex_from_mem(
-                    &m_tex, GL_TEXTURE0, texture_local.data, texture_local.width, texture_local.height, 4, 3
-            );
+            create_tex_from_mem(&m_tex, GL_TEXTURE0, texture_local.data, texture_local.width, texture_local.height, 4);
 
             // signal compute thread that pipeline has been recreated
             pthread_cond_signal(&computing_done_cv);
