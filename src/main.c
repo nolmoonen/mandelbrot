@@ -339,7 +339,7 @@ void update()
         pthread_mutex_lock(&computing_done_mutex);
         {
             nm_log(LOG_TRACE, "dumping texture to file\n");
-            const uint32_t channels = 3;
+            const uint32_t channels = 4;
             stbi_write_png(
                     "mandelbrot.png", texture_local.width, texture_local.height, channels, texture_local.data,
                     (int32_t) (texture_local.width * channels)
