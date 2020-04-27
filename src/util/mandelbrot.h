@@ -16,10 +16,10 @@ typedef struct Fractal {
 
 // mandelbrot variables for defined RESOLUTION
 static const Fractal FRACTAL_START = {
-        -2, // RE_START
-        1, // RE_END
-        -1, // IM_START
-        1, // IM_END
+        -2.0, // RE_START
+        +1.0, // RE_END
+        -1.0, // IM_START
+        +1.0, // IM_END
 };
 
 typedef struct Texture {
@@ -29,10 +29,12 @@ typedef struct Texture {
 } Texture;
 
 /** Calculates a HSV color based on iterations. */
-color_t color(double m, double *hues, uint32_t max_iterations);
+color_t color(float m, const float *hues, uint32_t max_iterations);
 
-/** Calculates iterations to converge, given a complex number. */
-double mandelbrot(complex_t c, uint32_t max_iterations);
+/**
+ * Calculates iterations to converge, given a complex number.
+ * Returns a value in [0, {max_iterations}]. */
+float mandelbrot(complex_t c, uint32_t max_iterations);
 
 void generate(Texture *p_texture, Fractal p_fractal, uint32_t p_max_iterations);
 
