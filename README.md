@@ -2,14 +2,14 @@
 
 ## Building
 * Clone [GLFW 3.3.2](https://github.com/glfw/glfw/releases/tag/3.3.2) source code into directory `external/glfw-3.3.2`.
-* Copy [stb](https://github.com/nothings/stb) into directory `external/stb`.
+* Clone [stb](https://github.com/nothings/stb) into directory `external/stb`.
 * Clone [linmath.h](https://github.com/datenwolf/linmath.h) into directory `external/linmath`.
 * Clone [glad v0.1.33](https://github.com/Dav1dde/glad/releases/tag/v0.1.33) into directory `external/glad-0.1.33`.
 * Build using CMake.
 
 ## Features
 * Zoom in to the Mandelbrot fractal.
-* Computations are done on a separate thread to keep the window responsive.
+* Computations are done in a separate thread to keep the window responsive.
 
 ## Controls
 * Click and hold with LMB to make a selection.
