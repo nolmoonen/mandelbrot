@@ -118,7 +118,7 @@ void *compute_function(void *vargp)
                 texture_local.width = texwidth;
                 texture_local.height = texheight;
 
-                uint8_t *new_data = realloc(texture_local.data, sizeof(uint8_t) * texwidth * texheight * 4);
+                uint8_t *new_data = realloc(texture_local.data, sizeof(uint8_t) * texwidth * texheight * 3);
                 if (new_data) {
                     texture_local.data = new_data;
                 } else {
@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 
     // create selection texture from one blue pixel
     uint8_t select_pixel[] = {51, 153, 255, 100};
-    create_tex_from_mem(&m_select_tex, GL_TEXTURE0, select_pixel, 1, 1, 4);
+    create_tex_from_mem(&m_select_tex, GL_TEXTURE0, select_pixel, 1, 1, 4, 4);
 
     // thread handle for the compute thread
     pthread_t compute_thread;
@@ -180,7 +180,7 @@ int main(int argc, char **argv)
     // allocate texture
     texture_local.width = get_window_width();
     texture_local.height = get_window_height();
-    texture_local.data = malloc(sizeof(uint8_t) * get_window_width() * get_window_height() * 4);
+    texture_local.data = malloc(sizeof(uint8_t) * get_window_width() * get_window_height() * 3);
 
     // create the compute thread
     pthread_create(&compute_thread, NULL, compute_function, NULL);
@@ -271,7 +271,7 @@ void update()
             nm_log(LOG_INFO, "replacing texture\n");
             delete_tex(&m_tex);
             create_tex_from_mem(
-                    &m_tex, GL_TEXTURE0, texture_local.data, texture_local.width, texture_local.height, 4
+                    &m_tex, GL_TEXTURE0, texture_local.data, texture_local.width, texture_local.height, 3, 4
             );
 
             // signal compute thread that pipeline has been recreated

@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 #include <malloc.h>
 #include "complex.h"
 #include "mandelbrot.h"
@@ -81,17 +82,13 @@ void generate(Texture *p_texture, Fractal p_fractal, uint32_t p_max_iterations)
     free(histogram);
 
     /** lookup color and create pixel data */
+    uint32_t pixel_start = 0;
     for (uint32_t y = 0; y < p_texture->height; y++) {
         for (uint32_t x = 0; x < p_texture->width; x++) {
             // create color, based on the number of iterations
             color_t rgb = color(all_iterations[y * p_texture->width + x], hues, p_max_iterations);
-
-            // fill data
-            uint32_t pixel = (y * p_texture->width + x) * 4;
-            p_texture->data[pixel + 0] = rgb.r;
-            p_texture->data[pixel + 1] = rgb.g;
-            p_texture->data[pixel + 2] = rgb.b;
-            p_texture->data[pixel + 3] = 255; // a
+            memcpy(&p_texture->data[pixel_start], &rgb, sizeof(rgb));
+            pixel_start += sizeof(color_t);
         }
     }
 

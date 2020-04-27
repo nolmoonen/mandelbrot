@@ -56,10 +56,13 @@ int create_tex_from_file_on_mem(
 
 /**
  * Texture data in memory. (RGB or RGBA)
+ * {t_data_channel_count} is the number of channels the data has,
+ * {t_texture_channel_count} is the number of channels the created texture should have
  * Call to {delete_tex} is required if {EXIT_FAILURE} is returned. */
 int create_tex_from_mem(
         tex_t *t_tex, GLenum t_texture_unit,
-        const unsigned char *t_tex_data, uint32_t width, uint32_t height, uint32_t t_channel_count
+        const unsigned char *t_tex_data, uint32_t width, uint32_t height,
+        uint32_t t_data_channel_count, uint32_t t_texture_channel_count
 );
 
 int bind_tex(tex_t *t_tex);
