@@ -1,3 +1,7 @@
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+
+#include <stb_image_write.h>
+
 #include <glad/glad.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -282,6 +286,16 @@ void update()
     }
 
     /** update state from input*/
+    // p dumps the texture to file
+    if (get_key_state(KEY_P, PRESSED)) {
+        nm_log(LOG_TRACE, "dumping texture to file\n");
+        const uint32_t channels = 3;
+        stbi_write_png(
+                "mandelbrot.png", texture_local.width, texture_local.height, channels, texture_local.data,
+                (int32_t) (texture_local.width * channels)
+        );
+    }
+
     // escape closes the window
     if (get_key_state(ESCAPE, PRESSED)) {
         set_window_to_close();
