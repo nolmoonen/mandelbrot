@@ -221,7 +221,7 @@ GLenum channel_count_to_format(uint32_t t_channel_count) {
 int create_tex_from_mem(
         tex_t *t_tex, GLenum t_texture_unit,
         const unsigned char *t_tex_data, uint32_t width, uint32_t height,
-        uint32_t t_data_channel_count, uint32_t t_texture_channel_count
+        uint32_t t_texture_channel_count, uint32_t t_data_channel_count
 )
 {
     glGenTextures(1, &t_tex->m_tex_id);
@@ -233,8 +233,8 @@ int create_tex_from_mem(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    GLenum data_format = channel_count_to_format(t_data_channel_count);
     GLenum tex_format = channel_count_to_format(t_texture_channel_count);
+    GLenum data_format = channel_count_to_format(t_data_channel_count);
 
     glTexImage2D(GL_TEXTURE_2D, 0, tex_format, width, height, 0, data_format, GL_UNSIGNED_BYTE, t_tex_data);
     glGenerateMipmap(GL_TEXTURE_2D);

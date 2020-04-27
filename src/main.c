@@ -45,6 +45,7 @@ tex_t m_tex;        // texture for the fractal
 tex_t m_select_tex; // texture for the selection quad
 
 pthread_mutex_t state_mutex;          // protects {m_state}
+pthread_mutex_t window_mutex;         // protects {get_window_width} and {get_window_height}
 // synchronizing behavior between compute and main thread
 pthread_mutex_t computing_done_mutex; // protects {texture_local}
 pthread_cond_t computing_done_cv;
@@ -61,8 +62,13 @@ volatile Texture texture_local;       // current texture
 
 void create_selection_matrix(mat4x4 p_selection_matrix)
 {
-    uint32_t w = get_window_width();
-    uint32_t h = get_window_height();
+    uint32_t w, h;
+    pthread_mutex_lock(&window_mutex);
+    {
+        w = get_window_width();
+        h = get_window_height();
+    }
+    pthread_mutex_unlock(&window_mutex);
     float selected_size_width = (float) (xpos - clicked_xpos);
     // height is scaled from horizontal positions to maintain window aspect ratio
     float selected_size_height = (selected_size_width / (float) w) * h;
@@ -102,13 +108,62 @@ void *compute_function(void *vargp)
         // obtain data mutex and compute next texture
         pthread_mutex_lock(&computing_done_mutex);
         {
-            uint32_t texwidth, texheight, maxiter, depth;
+            /** obtain width and height */
+            uint32_t w, h;
+            pthread_mutex_lock(&window_mutex);
+            {
+                w = get_window_width();
+                h = get_window_height();
+            }
+            pthread_mutex_unlock(&window_mutex);
+
+            /** update state if expected size does not match with obtained size */
+            if (texture_local.width != w || texture_local.height != h) {
+                texture_local.width = w;
+                texture_local.height = h;
+
+                // change the size of the allocated buffer
+                uint8_t *new_data = realloc(
+                        texture_local.data, sizeof(uint8_t) * texture_local.width * texture_local.height * 3
+                );
+                if (new_data) {
+                    texture_local.data = new_data;
+                } else {
+                    // todo: exit thread due to fatal error, could not reallocate memory
+                    nm_log(LOG_ERROR, "cannot reallocate memory\n");
+                }
+
+                pthread_mutex_lock(&state_mutex);
+                {
+                    // reset max iterations
+                    m_state.max_iterations = INITIAL_MAX_ITER;
+
+                    // clear the stack and reset pointer
+                    m_state.fractal_stack_pointer = 0;
+
+                    // set the start coordinates based on new resolution
+                    m_state.fractal_stack[0] = FRACTAL_START;
+                    float new_res = w / (float) h;
+                    if (new_res < RESOLUTION) { // new height is larger, so scale height parameters up
+                        m_state.fractal_stack[0].im_start *= (RESOLUTION / new_res);
+                        m_state.fractal_stack[0].im_end *= (RESOLUTION / new_res);
+                    } else if (new_res > RESOLUTION) { // new width is larger, so scale width parameters up
+                        m_state.fractal_stack[0].re_start *= (new_res / RESOLUTION);
+                        m_state.fractal_stack[0].re_end *= (new_res / RESOLUTION);
+                    } else {
+                        // resolution is exactly the same, and FRACTAL_START is appropriate
+                    }
+                }
+                pthread_mutex_unlock(&state_mutex);
+            }
+
+            nm_log(LOG_TRACE, "starting to compute for size=%ux%u\n", texture_local.width, texture_local.height);
+
+            uint32_t maxiter, depth;
             Fractal fractal;
             /** obtain the state mutex and copy the values needed to compute the next texture */
             pthread_mutex_lock(&state_mutex);
             {
-                texwidth = get_window_width();
-                texheight = get_window_height();
                 depth = m_state.fractal_stack_pointer;
                 fractal = m_state.fractal_stack[m_state.fractal_stack_pointer];
                 maxiter = m_state.max_iterations;
@@ -116,23 +171,7 @@ void *compute_function(void *vargp)
             }
             pthread_mutex_unlock(&state_mutex);
 
-            // if the screen size has changed in the meantime, change the size of the allocated buffer
-            if (texture_local.width != texwidth || texture_local.height != texheight) {
-                texture_local.width = texwidth;
-                texture_local.height = texheight;
-
-                uint8_t *new_data = realloc(texture_local.data, sizeof(uint8_t) * texwidth * texheight * 3);
-                if (new_data) {
-                    texture_local.data = new_data;
-                } else {
-                    // todo: exit thread due to fatal error, could not reallocate memory
-                }
-            }
-
-            nm_log(
-                    LOG_TRACE, "starting to compute for size=%ux%u, max_iter=%u, depth=%u\n",
-                    texture_local.width, texture_local.height, maxiter, depth
-            );
+            nm_log(LOG_TRACE, "copied fractal info for max_iter=%u, depth=%u\n", maxiter, depth);
 
             generate(&texture_local, fractal, maxiter);
 
@@ -181,9 +220,10 @@ int main(int argc, char **argv)
     m_state.fractal_stack[m_state.fractal_stack_pointer] = FRACTAL_START;
 
     // initialize synchronization variables
-    pthread_mutex_init(&state_mutex, NULL);
-    pthread_mutex_init(&computing_done_mutex, NULL);
-    pthread_cond_init(&computing_done_cv, NULL);
+    if (pthread_mutex_init(&state_mutex, NULL) != 0) nm_log(LOG_ERROR, "e\n");
+    if (pthread_mutex_init(&window_mutex, NULL) != 0) nm_log(LOG_ERROR, "e\n");
+    if (pthread_mutex_init(&computing_done_mutex, NULL) != 0) nm_log(LOG_ERROR, "e\n");
+    if (pthread_cond_init(&computing_done_cv, NULL) != 0) nm_log(LOG_ERROR, "e\n");
 
     // allocate texture
     texture_local.width = get_window_width();
@@ -201,7 +241,11 @@ int main(int argc, char **argv)
     char title[256];
     while (!window_should_close()) {
         // process events; fill input handler (through glfw callbacks)
-        pull_input();
+        pthread_mutex_lock(&window_mutex);
+        {
+            pull_input();
+        }
+        pthread_mutex_unlock(&window_mutex);
 
         update();
 
@@ -234,6 +278,7 @@ int main(int argc, char **argv)
     // destroy all mutices
     pthread_mutex_destroy(&computing_done_mutex);
     pthread_mutex_destroy(&state_mutex);
+    pthread_mutex_destroy(&window_mutex);
 
     // destroy all condition variables
     pthread_cond_destroy(&computing_done_cv);
@@ -279,7 +324,7 @@ void update()
             // replace the texture for the computed one
             delete_tex(&m_tex);
             create_tex_from_mem(
-                    &m_tex, GL_TEXTURE0, texture_local.data, texture_local.width, texture_local.height, 3, 4
+                    &m_tex, GL_TEXTURE0, texture_local.data, texture_local.width, texture_local.height, 4, 3
             );
 
             // signal compute thread that pipeline has been recreated
@@ -339,8 +384,13 @@ void update()
                     fprintf(stdout, "maximum depth reached!\n");
                 } else {
                     if (selecting) { // to allow for canceling selection
-                        uint32_t w = get_window_width();
-                        uint32_t h = get_window_height();
+                        uint32_t w, h;
+                        pthread_mutex_lock(&window_mutex);
+                        {
+                            w = get_window_width();
+                            h = get_window_height();
+                        }
+                        pthread_mutex_unlock(&window_mutex);
 
                         // obtain new ypos based on aspect ratio rather than real ypos
                         float ypos_scaled =
@@ -383,32 +433,15 @@ void update()
     }
 
     // update state
-    if (m_resized) {
+    if (is_resized()) {
         nm_log(LOG_TRACE, "resized\n");
-        uint32_t w = get_window_width();
-        uint32_t h = get_window_height();
-        pthread_mutex_lock(&state_mutex);
+        uint32_t w, h;
+        pthread_mutex_lock(&window_mutex);
         {
-            // reset max iterations
-            m_state.max_iterations = INITIAL_MAX_ITER;
-
-            // clear the stack and reset pointer
-            m_state.fractal_stack_pointer = 0;
-
-            // set the start coordinates based on new resolution
-            m_state.fractal_stack[0] = FRACTAL_START;
-            float new_res = w / (float) h;
-            if (new_res < RESOLUTION) { // new height is larger, so scale height parameters up
-                m_state.fractal_stack[0].im_start *= (RESOLUTION / new_res);
-                m_state.fractal_stack[0].im_end *= (RESOLUTION / new_res);
-            } else if (new_res > RESOLUTION) { // new width is larger, so scale width parameters up
-                m_state.fractal_stack[0].re_start *= (new_res / RESOLUTION);
-                m_state.fractal_stack[0].re_end *= (new_res / RESOLUTION);
-            } else {
-                // resolution is exactly the same, and FRACTAL_START is appropriate
-            }
+            w = get_window_width();
+            h = get_window_height();
         }
-        pthread_mutex_unlock(&state_mutex);
+        pthread_mutex_unlock(&window_mutex);
 
         glViewport(0, 0, w, h);
     }

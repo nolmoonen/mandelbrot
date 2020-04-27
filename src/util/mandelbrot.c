@@ -38,7 +38,7 @@ float mandelbrot(complex_t c, uint32_t max_iterations)
     return nm_clampf(0, max_iterations, (float) n + 1.f - logf(log2f((float) abs_complex(z))));
 }
 
-void generate(Texture *p_texture, Fractal p_fractal, uint32_t p_max_iterations)
+void generate(volatile Texture *p_texture, Fractal p_fractal, uint32_t p_max_iterations)
 {
     float *all_iterations = malloc(sizeof(float) * p_texture->width * p_texture->height);
     // histogram counting the frequencies of all values expect max
