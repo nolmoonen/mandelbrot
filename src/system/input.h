@@ -1,3 +1,4 @@
+// nolmoonen v1.0.0
 #ifndef NM_INPUT_H
 #define NM_INPUT_H
 
@@ -6,7 +7,7 @@
 /** Call to {@link cleanup_input} is required if EXIT_SUCCESS is returned. */
 int init_input();
 
-int cleanup_input();
+void cleanup_input();
 
 int pull_input();
 
@@ -22,6 +23,7 @@ double get_xoffset();
 double get_yoffset();
 
 /** mouse inputs */
+// todo apply same scheme as for keyboard (possibly in same masks)
 // whether this button was pressed or released
 bool m_left_pressed;
 bool m_left_released;
@@ -76,42 +78,33 @@ double get_offset_xpos();
 double get_offset_ypos();
 
 /** keyboard */
-bool w_down;
-bool a_down;
-bool s_down;
-bool d_down;
-bool esc_down; // escape
-// backspace
-bool bs_down;
-bool bs_up;
+#define KEY_COUNT 3      // number of key values defined in {key_value_t}
+#define BITS_PER_MASK 32 // number of bits per vectors {m_pressed, m_released, m_down}
+// number of vectors are needed to maintain all key values
+#define VECTOR_COUNT (KEY_COUNT / BITS_PER_MASK + ((KEY_COUNT % BITS_PER_MASK) ? 1 : 0))
+typedef enum {
+    BACKSPACE = 0,
+    ESCAPE,
+    KEY_P
+    // NB: update {KEY_COUNT}
+} key_value_t;
 
-int set_w_down(bool t_down);
+typedef enum {
+    PRESSED = 0,
+    RELEASED,
+    DOWN
+} key_state_t;
 
-int set_a_down(bool t_down);
+uint32_t *m_pressed;  // whether key is pressed in last tick
+uint32_t *m_released; // whether key is released in last tick
+uint32_t *m_down;     // whether key is down at end of last tick
 
-int set_s_down(bool t_down);
+void set_key_state(key_value_t p_value, key_state_t p_state);
 
-int set_d_down(bool t_down);
+// really only used for {m_down} since {m_pressed} and m_released are reset in {pull_input}
+void unset_key_state(key_value_t p_value, key_state_t p_state);
 
-void set_esc_down(bool p_down);
-
-void set_bs_down(bool p_down);
-
-void set_bs_up(bool p_up);
-
-bool is_w_down();
-
-bool is_a_down();
-
-bool is_s_down();
-
-bool is_d_down();
-
-bool is_esc_down();
-
-bool is_bs_down();
-
-bool is_bs_up();
+bool get_key_state(key_value_t p_value, key_state_t p_state);
 
 /** framebuffer */
 bool m_resized;

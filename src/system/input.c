@@ -1,10 +1,18 @@
+// nolmoonen v1.0.0
 #include <stdlib.h>
 #include <GLFW/glfw3.h>
+#include <util/log.h>
+#include <string.h>
 
 #include "input.h"
 
 int init_input()
 {
+    /** allocate memory */
+    m_pressed = malloc(VECTOR_COUNT * sizeof(uint32_t));
+    m_down = malloc(VECTOR_COUNT * sizeof(uint32_t));
+    m_released = malloc(VECTOR_COUNT * sizeof(uint32_t));
+
     /** set input that require an initialization */
     m_left_pressed = false;
     m_left_released = false;
@@ -13,23 +21,16 @@ int init_input()
     m_right_pressed = false;
     m_right_released = false;
 
-    // reset keyboard inputs
-    w_down = false;
-    a_down = false;
-    s_down = false;
-    d_down = false;
-    esc_down = false;
-    bs_down = false;
-    bs_up = false;
-
     m_resized = false;
 
     return EXIT_SUCCESS;
 }
 
-int cleanup_input()
+void cleanup_input()
 {
-    return EXIT_SUCCESS;
+    free(m_released);
+    free(m_down);
+    free(m_pressed);
 }
 
 int pull_input()
@@ -48,8 +49,9 @@ int pull_input()
     m_right_pressed = false;
     m_right_released = false;
 
-    // "up"-events need to be reset
-    bs_up = false;
+    // pressed/released events are reset, down events are maintained
+    memset(m_pressed, 0, sizeof(uint32_t) * VECTOR_COUNT);
+    memset(m_released, 0, sizeof(uint32_t) * VECTOR_COUNT);
 
     m_resized = false;
 
@@ -158,80 +160,58 @@ double get_offset_ypos()
 /**
  * keyboard
  */
-int set_w_down(bool t_down)
+uint32_t *get_vector_from_state(key_state_t p_state)
 {
-    w_down = t_down;
-    return EXIT_SUCCESS;
+    switch (p_state) {
+        case PRESSED:
+            return m_pressed;
+        case RELEASED:
+            return m_released;
+        case DOWN:
+            return m_down;
+        default:
+            nm_log(LOG_ERROR, "unknown key state %d\n", p_state);
+            return NULL;
+    }
 }
 
-int set_a_down(bool t_down)
+void set_key_state(key_value_t p_value, key_state_t p_state)
 {
-    a_down = t_down;
-    return EXIT_SUCCESS;
+    if (p_value >= KEY_COUNT) {
+        nm_log(LOG_WARN, "unknown key value %d\n", p_value);
+        return;
+    }
+
+    uint32_t *vector = get_vector_from_state(p_state);
+    vector[p_value / BITS_PER_MASK] |= 1u << (p_value % BITS_PER_MASK);
 }
 
-int set_s_down(bool t_down)
+void unset_key_state(key_value_t p_value, key_state_t p_state)
 {
-    s_down = t_down;
-    return EXIT_SUCCESS;
+    if (p_value >= KEY_COUNT) {
+        nm_log(LOG_WARN, "unknown key value %d\n", p_value);
+        return;
+    }
+
+    uint32_t *vector = get_vector_from_state(p_state);
+    vector[p_value / BITS_PER_MASK] &= ~(1u << (p_value % BITS_PER_MASK));
 }
 
-int set_d_down(bool t_down)
+bool get_key_state(key_value_t p_value, key_state_t p_state)
 {
-    d_down = t_down;
-    return EXIT_SUCCESS;
+    if (p_value >= KEY_COUNT) {
+        nm_log(LOG_WARN, "unknown key value %d\n", p_value);
+        return false;
+    }
+
+    uint32_t *vector = get_vector_from_state(p_state);
+    uint32_t mask = 1u << (p_value % BITS_PER_MASK);
+    return vector[p_value / BITS_PER_MASK] & mask;
 }
 
-void set_esc_down(bool p_down)
-{
-    esc_down = p_down;
-}
-
-void set_bs_down(bool p_down)
-{
-    bs_down = p_down;
-}
-
-void set_bs_up(bool p_up)
-{
-    bs_up = p_up;
-}
-
-bool is_w_down()
-{
-    return w_down;
-}
-
-bool is_a_down()
-{
-    return a_down;
-}
-
-bool is_s_down()
-{
-    return s_down;
-}
-
-bool is_d_down()
-{
-    return d_down;
-}
-
-bool is_esc_down()
-{
-    return esc_down;
-}
-
-bool is_bs_down()
-{
-    return bs_down;
-}
-
-bool is_bs_up()
-{
-    return bs_up;
-}
-
+/**
+ * framebuffer
+ */
 void set_resized(bool p_resized)
 {
     m_resized = p_resized;

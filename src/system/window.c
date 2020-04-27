@@ -119,29 +119,34 @@ void error_callback(int t_error, const char *t_description)
 void key_callback(GLFWwindow *t_window, int t_key, int t_scancode, int t_action, int t_mods)
 {
     // per documentation: "The action is one of GLFW_PRESS, GLFW_REPEAT or GLFW_RELEASE."
-    // it is sufficient to use (t_action == GLFW_PRESS || t_action == GLFW_REPEAT)
-    // since a GLFW_RELEASE action always follows
+    // todo find a way to produce less duplicate code
     switch (t_key) {
         case GLFW_KEY_ESCAPE:
-            set_esc_down(t_action == GLFW_PRESS || t_action == GLFW_REPEAT);
+            if (t_action == GLFW_PRESS) {
+                set_key_state(ESCAPE, PRESSED);
+                set_key_state(ESCAPE, DOWN);
+            } else if (t_action == GLFW_RELEASE) {
+                set_key_state(ESCAPE, RELEASED);
+                unset_key_state(ESCAPE, DOWN);
+            }
             break;
-        case GLFW_KEY_BACKSPACE: {
-            bool down = t_action == GLFW_PRESS || t_action == GLFW_REPEAT;
-            set_bs_down(down);
-            set_bs_up(!down);
+        case GLFW_KEY_BACKSPACE:
+            if (t_action == GLFW_PRESS) {
+                set_key_state(BACKSPACE, PRESSED);
+                set_key_state(BACKSPACE, DOWN);
+            } else if (t_action == GLFW_RELEASE) {
+                set_key_state(BACKSPACE, RELEASED);
+                unset_key_state(BACKSPACE, DOWN);
+            }
             break;
-        }
-        case GLFW_KEY_W:
-            set_w_down(t_action == GLFW_PRESS || t_action == GLFW_REPEAT);
-            break;
-        case GLFW_KEY_A:
-            set_a_down(t_action == GLFW_PRESS || t_action == GLFW_REPEAT);
-            break;
-        case GLFW_KEY_S:
-            set_s_down(t_action == GLFW_PRESS || t_action == GLFW_REPEAT);
-            break;
-        case GLFW_KEY_D:
-            set_d_down(t_action == GLFW_PRESS || t_action == GLFW_REPEAT);
+        case GLFW_KEY_P:
+            if (t_action == GLFW_PRESS) {
+                set_key_state(KEY_P, PRESSED);
+                set_key_state(KEY_P, DOWN);
+            } else if (t_action == GLFW_RELEASE) {
+                set_key_state(KEY_P, RELEASED);
+                unset_key_state(KEY_P, DOWN);
+            }
             break;
         default:
             break;

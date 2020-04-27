@@ -283,12 +283,12 @@ void update()
 
     /** update state from input*/
     // escape closes the window
-    if (is_esc_down()) {
+    if (get_key_state(ESCAPE, PRESSED)) {
         set_window_to_close();
     }
 
     // backspace zooms out
-    if (is_bs_up()) {
+    if (get_key_state(BACKSPACE, RELEASED)) {
         nm_log(LOG_TRACE, "zooming out\n");
         pthread_mutex_lock(&state_mutex);
         {
