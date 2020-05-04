@@ -8,12 +8,15 @@ typedef struct {
 } complex_t;
 
 /** Complex number multiplication. */
-complex_t mul_complex(complex_t x, complex_t y);
+complex_t complex_mul(complex_t x, complex_t y);
+
+/** Complex number multiplication with itself. */
+complex_t complex_mul_self(complex_t x);
 
 /** Complex number absolute value. */
-double abs_complex(complex_t x);
+double complex_abs(complex_t x);
 
 /** Complex number addition. */
-complex_t add_complex(complex_t x, complex_t y);
+complex_t complex_add(complex_t x, complex_t y);
 
 #endif //MANDELBROT_COMPLEX_H

@@ -36,6 +36,8 @@ color_t color(float m, const float *hues, uint32_t max_iterations);
  * Returns a value in [0, {max_iterations}]. */
 float mandelbrot(complex_t c, uint32_t max_iterations);
 
-void generate(volatile Texture *p_texture, Fractal p_fractal, uint32_t p_max_iterations);
+void generate(
+        volatile Texture *p_texture, Fractal p_fractal, uint32_t p_max_iterations, uint32_t SPP_X, uint32_t SPP_Y
+);
 
 #endif //MANDELBROT_MANDELBROT_H

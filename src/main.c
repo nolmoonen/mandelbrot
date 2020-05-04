@@ -16,17 +16,12 @@
 #include <util/util.h>
 #include <util/mandelbrot.h>
 
-// initial value of max_iterations
-#define INITIAL_MAX_ITER 60
-
-// amount of iterations the maximum number of iterations in the mandelbrot function is increased each step
-#define ITER_STEP 20
-
-// limit to the amount of times the fractal can be zoomed into
-#define MAX_LEVELS 32
-
-// resolution of the fractal defined by the FRACTAL_START coordinates
-#define RESOLUTION (4.0f / 3.0f)
+const uint32_t INITIAL_MAX_ITER = 60;   // initial value of max_iterations
+const uint32_t ITER_STEP = 20;          // the value of which max_iterations is increased by, every step
+#define MAX_LEVELS 32                   // limit to the amount of times the fractal can be zoomed into
+const float RESOLUTION = (4.0f / 3.0f); // resolution of the fractal defined by the FRACTAL_START coordinates
+const uint32_t SAMPLES_PER_PIXEL_X = 1;                   // number of samples per pixel in horizontal direction
+const uint32_t SAMPLES_PER_PIXEL_Y = SAMPLES_PER_PIXEL_X; // number of samples per pixel in horizontal direction
 
 // state that is shared between the two threads
 struct state {
@@ -173,7 +168,7 @@ void *compute_function(void *vargp)
 
             nm_log(LOG_TRACE, "copied fractal info for max_iter=%u, depth=%u\n", maxiter, depth);
 
-            generate(&texture_local, fractal, maxiter);
+            generate(&texture_local, fractal, maxiter, SAMPLES_PER_PIXEL_X, SAMPLES_PER_PIXEL_Y);
 
             computing_done = true; // tell main thread that texture has been completed
 
