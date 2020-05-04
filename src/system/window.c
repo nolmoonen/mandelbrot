@@ -34,6 +34,7 @@ int init_window(bool p_ortho)
     glfwSetMouseButtonCallback(m_window, mouse_button_callback);
     glfwSetCursorPosCallback(m_window, cursor_position_callback);
     glfwSetFramebufferSizeCallback(m_window, framebuffer_size_callback);
+    glfwSetWindowIconifyCallback(m_window, window_iconify_callback);
 
     glfwMakeContextCurrent(m_window);
 
@@ -109,6 +110,16 @@ int set_window_title(const char *t_title)
     glfwSetWindowTitle(m_window, t_title);
 
     return EXIT_SUCCESS;
+}
+
+uint32_t get_window_width()
+{
+    return m_window_width;
+}
+
+uint32_t get_window_height()
+{
+    return m_window_height;
 }
 
 void error_callback(int t_error, const char *t_description)
@@ -200,12 +211,7 @@ void framebuffer_size_callback(GLFWwindow *t_window, int t_width, int t_height)
     set_resized(true);
 }
 
-uint32_t get_window_width()
+void window_iconify_callback(GLFWwindow *t_window, int t_iconified)
 {
-    return m_window_width;
-}
-
-uint32_t get_window_height()
-{
-    return m_window_height;
+    set_iconified(t_iconified);
 }

@@ -217,7 +217,17 @@ void set_resized(bool p_resized)
     m_resized = p_resized;
 }
 
+void set_iconified(bool p_iconified)
+{
+    m_iconified = p_iconified;
+}
+
 bool is_resized()
 {
     return m_resized;
+}
+
+bool is_iconified()
+{
+    return m_iconified;
 }

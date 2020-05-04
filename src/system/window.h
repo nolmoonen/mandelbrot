@@ -49,6 +49,8 @@ static void cursor_position_callback(GLFWwindow *t_window, double t_xpos, double
 
 void framebuffer_size_callback(GLFWwindow *t_window, int t_width, int t_height);
 
+void window_iconify_callback(GLFWwindow *t_window, int t_iconified);
+
 /** End GLFW callbacks. */
 
 #endif //NM_WINDOW_H

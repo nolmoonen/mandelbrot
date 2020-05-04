@@ -107,10 +107,14 @@ void unset_key_state(key_value_t p_value, key_state_t p_state);
 bool get_key_state(key_value_t p_value, key_state_t p_state);
 
 /** framebuffer */
-bool m_resized;
+bool m_resized;   // whether resized in last tick
+bool m_iconified; // whether window is iconified at end of last tick
 
 void set_resized(bool p_resized);
+void set_iconified(bool p_iconified);
 
 bool is_resized();
+
+bool is_iconified();
 
 #endif //NM_INPUT_H

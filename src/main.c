@@ -312,8 +312,8 @@ void update()
 {
     /** replace texture */
     // if computing is done, to apply computed texture to window
-    // this is done before processing input
-    if (computing_done) {
+    // only when perform this work when the window is not iconified to prevent computing for size 0x0
+    if (computing_done && !is_iconified()) {
         pthread_mutex_lock(&computing_done_mutex);
         {
             // replace the texture for the computed one

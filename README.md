@@ -23,4 +23,3 @@
 * Preemption to compute thread in the case of resizing, zooming in/out, closing application.
 * Full screen mode (for saving 1920x1080 textures).
 * Color schemes.
-* Minimizing is seen as a resize event.
